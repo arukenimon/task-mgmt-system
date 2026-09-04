@@ -5,13 +5,13 @@ insert into public.teams (id, name) values
   ('10000000-0000-0000-0000-000000000002', 'South Team')
 on conflict (id) do nothing;
 
-insert into auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at) values
-  ('20000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'alex.morgan@taskhub.demo', crypt('DemoPass!2026', gen_salt('bf')), now(), '{"provider":"email","providers":["email"]}', '{}', now(), now()),
-  ('20000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'sophie.turner@taskhub.demo', crypt('DemoPass!2026', gen_salt('bf')), now(), '{"provider":"email","providers":["email"]}', '{}', now(), now()),
-  ('20000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'marcus.reed@taskhub.demo', crypt('DemoPass!2026', gen_salt('bf')), now(), '{"provider":"email","providers":["email"]}', '{}', now(), now()),
-  ('20000000-0000-0000-0000-000000000004', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'zoe.patel@taskhub.demo', crypt('DemoPass!2026', gen_salt('bf')), now(), '{"provider":"email","providers":["email"]}', '{}', now(), now()),
-  ('20000000-0000-0000-0000-000000000005', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'liam.chen@taskhub.demo', crypt('DemoPass!2026', gen_salt('bf')), now(), '{"provider":"email","providers":["email"]}', '{}', now(), now()),
-  ('20000000-0000-0000-0000-000000000006', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'olivia.grant@taskhub.demo', crypt('DemoPass!2026', gen_salt('bf')), now(), '{"provider":"email","providers":["email"]}', '{}', now(), now())
+insert into auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, confirmation_token, recovery_token, email_change_token_new, email_change, email_change_token_current, reauthentication_token, raw_app_meta_data, raw_user_meta_data, created_at, updated_at) values
+  ('20000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'alex.morgan@taskhub.demo', crypt('DemoPass!2026', gen_salt('bf')), now(), '', '', '', '', '', '', '{"provider":"email","providers":["email"]}', '{}', now(), now()),
+  ('20000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'sophie.turner@taskhub.demo', crypt('DemoPass!2026', gen_salt('bf')), now(), '', '', '', '', '', '', '{"provider":"email","providers":["email"]}', '{}', now(), now()),
+  ('20000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'marcus.reed@taskhub.demo', crypt('DemoPass!2026', gen_salt('bf')), now(), '', '', '', '', '', '', '{"provider":"email","providers":["email"]}', '{}', now(), now()),
+  ('20000000-0000-0000-0000-000000000004', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'zoe.patel@taskhub.demo', crypt('DemoPass!2026', gen_salt('bf')), now(), '', '', '', '', '', '', '{"provider":"email","providers":["email"]}', '{}', now(), now()),
+  ('20000000-0000-0000-0000-000000000005', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'liam.chen@taskhub.demo', crypt('DemoPass!2026', gen_salt('bf')), now(), '', '', '', '', '', '', '{"provider":"email","providers":["email"]}', '{}', now(), now()),
+  ('20000000-0000-0000-0000-000000000006', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'olivia.grant@taskhub.demo', crypt('DemoPass!2026', gen_salt('bf')), now(), '', '', '', '', '', '', '{"provider":"email","providers":["email"]}', '{}', now(), now())
 on conflict (id) do nothing;
 
 insert into auth.identities (id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at) values
