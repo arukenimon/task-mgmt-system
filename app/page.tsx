@@ -1,63 +1,29 @@
-import { TaskWorkspace } from "@/features/tasks/views/task-workspace";
-import { demoClients, demoPeople, demoTasks, demoTeams } from "@/features/tasks/models/task";
-import { DEFAULT_FILTERS, type TaskFilters } from "@/features/tasks/models/task-filters";
-import { hasSupabaseConfig } from "@/lib/supabase/env";
-import { loadWorkspaceForCurrentUser } from "@/features/tasks/repositories/workspace.repository";
 import { redirect } from "next/navigation";
+import type { WorkspaceSearchParams } from "@/app/workspace-page";
 
 type HomeProps = {
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
+  searchParams: Promise<WorkspaceSearchParams>;
 };
 
-function firstValue(value: string | string[] | undefined) {
-  return Array.isArray(value) ? value[0] : value;
-}
-
-function filtersFromParams(params: Record<string, string | string[] | undefined>): TaskFilters {
-  return {
-    clientId: firstValue(params.client) ?? DEFAULT_FILTERS.clientId,
-    teamId: firstValue(params.team) ?? DEFAULT_FILTERS.teamId,
-    ownerId: firstValue(params.owner) ?? DEFAULT_FILTERS.ownerId,
-    status: (firstValue(params.status) ?? DEFAULT_FILTERS.status) as TaskFilters["status"],
-    priority: (firstValue(params.priority) ?? DEFAULT_FILTERS.priority) as TaskFilters["priority"],
-    due: (firstValue(params.due) ?? DEFAULT_FILTERS.due) as TaskFilters["due"],
-    query: firstValue(params.q) ?? DEFAULT_FILTERS.query,
-  };
-}
+const LEGACY_VIEW_ROUTES: Record<string, string> = {
+  overview: "/overview",
+  list: "/list",
+  calendar: "/calendar",
+  board: "/kanban",
+  kanban: "/kanban",
+};
 
 export default async function Home({ searchParams }: HomeProps) {
   const params = await searchParams;
-  const filters = filtersFromParams(params);
-  const view = firstValue(params.view);
-  if (hasSupabaseConfig) {
-    const workspace = await loadWorkspaceForCurrentUser();
-    if (!workspace) redirect("/login");
-    return (
-      <TaskWorkspace
-        initialActorId={workspace.actorId}
-        initialTasks={workspace.tasks}
-        people={workspace.people}
-        clients={workspace.clients}
-        teams={workspace.teams}
-        initialView={view}
-        initialFilters={filters}
-        isDemo={false}
-      />
-    );
-  }
-  const demoActor = firstValue(params.as);
-  const actorId = demoPeople.some((person) => person.id === demoActor) ? demoActor! : "director-1";
+  const legacyView = Array.isArray(params.view) ? params.view[0] : params.view;
+  const targetPath = legacyView ? LEGACY_VIEW_ROUTES[legacyView] ?? "/overview" : "/overview";
+  const nextParams = new URLSearchParams();
 
-  return (
-    <TaskWorkspace
-      initialActorId={actorId}
-      initialTasks={demoTasks}
-      clients={demoClients}
-      people={demoPeople}
-      teams={demoTeams}
-      initialView={view}
-      initialFilters={filters}
-      isDemo
-    />
-  );
+  for (const [key, value] of Object.entries(params)) {
+    if (key === "view" || value === undefined) continue;
+    for (const item of Array.isArray(value) ? value : [value]) nextParams.append(key, item);
+  }
+
+  const query = nextParams.toString();
+  redirect(`${targetPath}${query ? `?${query}` : ""}`);
 }

@@ -1,28 +1,26 @@
 import "server-only";
 
-import type { Role } from "@/features/identity/models/roles";
+import { getCurrentProfile } from "@/features/identity/repositories/profile.repository";
 import { createClient } from "@/lib/supabase/server";
 import { TASK_PRIORITIES, TASK_STATUSES, type Client, type Person, type Task, type Team } from "@/features/tasks/models/task";
 
-function assertRole(value: string): Role {
+function assertRole(value: string): Person["role"] {
   if (value === "senior_director" || value === "account_director" || value === "team_member") return value;
   throw new Error("Profile has an invalid role.");
 }
 
 export async function loadWorkspaceForCurrentUser() {
-  const supabase = await createClient();
-  const { data: authData, error: authError } = await supabase.auth.getUser();
-  if (authError || !authData.user) return null;
+  const profile = await getCurrentProfile();
+  if (!profile) return null;
 
-  const [profileResult, tasksResult, peopleResult, clientsResult, teamsResult] = await Promise.all([
-    supabase.from("profiles").select("id").eq("id", authData.user.id).single(),
+  const supabase = await createClient();
+  const [tasksResult, peopleResult, clientsResult, teamsResult] = await Promise.all([
     supabase.from("tasks").select("id,title,description,client_id,team_id,owner_id,created_by_id,status,priority,due_date,completed_at,created_at").order("due_date"),
-    supabase.from("profiles").select("id,full_name,email,initials,role,team_id").order("full_name"),
+    supabase.from("profiles").select("id,full_name,email,initials,role,team_id,is_active").order("full_name"),
     supabase.from("clients").select("id,name,account_lead_id").order("name"),
     supabase.from("teams").select("id,name").order("name"),
   ]);
 
-  if (profileResult.error || !profileResult.data) throw new Error("Your Task Hub profile is not configured.");
   if (tasksResult.error || peopleResult.error || clientsResult.error || teamsResult.error) throw new Error("Unable to load workspace data.");
 
   const tasks: Task[] = (tasksResult.data ?? []).map((task) => {
@@ -49,8 +47,9 @@ export async function loadWorkspaceForCurrentUser() {
     initials: person.initials,
     role: assertRole(person.role),
     teamId: person.team_id,
+    isActive: person.is_active,
   }));
   const clients: Client[] = (clientsResult.data ?? []).map((client) => ({ id: client.id, name: client.name, accountLeadId: client.account_lead_id }));
   const teams: Team[] = (teamsResult.data ?? []).map((team, index) => ({ id: team.id, name: team.name, accent: index % 2 ? "violet" : "teal" }));
-  return { actorId: profileResult.data.id, tasks, people, clients, teams };
+  return { actorId: profile.id, tasks, people, clients, teams };
 }

@@ -1,8 +1,8 @@
-# Task Hub
+# Bespoke Task Management System
 
-Task Hub is a role-aware internal workflow tool for client-delivery teams. It demonstrates individual, team, and leadership reporting alongside client filtering, deadline tracking, List, Calendar, and Kanban views.
+Bespoke is a role-aware, tailored task management system for client-delivery teams. It supports individual, team, and leadership reporting alongside client filtering, deadline tracking, List, Calendar, Kanban, and Senior Director team-management views.
 
-The interface opens with interactive seeded demo data, so it can be presented before local infrastructure is configured. Running Supabase locally turns the same architecture into a password-protected, RLS-enforced application foundation.
+Every workspace route requires a Supabase Auth session. Team members sign in through an emailed one-time link; Supabase RLS independently enforces the same role and team boundaries at the database.
 
 ## Quick start
 
@@ -16,9 +16,9 @@ npx supabase status -o env
 npm run dev
 ```
 
-Copy the local API URL and publishable key shown by `supabase status` into `.env.local`. Open `http://localhost:3000` for the interactive demo, or `http://localhost:3000/login` for Supabase Auth.
+Copy the local API URL, publishable key, and service-role key shown by `supabase status` into `.env.local`, then open `http://localhost:3000`. The service-role key is server-only and is required for Senior Directors to send Auth invitations or deactivate sign-in access. The app redirects to the passwordless sign-in screen until a session is established.
 
-Local Mailpit is available at `http://localhost:54324`. The seeded accounts use `DemoPass!2026`.
+Local Mailpit is available at `http://localhost:55424`. Request a sign-in link for any seeded email, then open the link in Mailpit to authenticate. The local HTML template lives at `supabase/templates/magic-link.html`.
 
 ## Useful commands
 

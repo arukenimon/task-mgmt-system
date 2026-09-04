@@ -29,7 +29,7 @@ export async function queueDailyDigests() {
     const owner = Array.isArray(profile) ? profile[0] : profile;
     if (!owner) return [];
     const lines = tasks.map((task) => `<li><strong>${task.title}</strong> — due ${task.due_date}</li>`).join("");
-    return [{ dedupe_key: `daily-digest:${ownerId}:${date}`, recipient: owner.email, subject: `Task Hub: ${tasks.length} deadline reminder${tasks.length === 1 ? "" : "s"}`, html: `<h1>Today’s task reminder</h1><p>Hello ${owner.full_name},</p><ul>${lines}</ul>` }];
+    return [{ dedupe_key: `daily-digest:${ownerId}:${date}`, recipient: owner.email, subject: `Bespoke: ${tasks.length} deadline reminder${tasks.length === 1 ? "" : "s"}`, html: `<h1>Today’s task reminder</h1><p>Hello ${owner.full_name},</p><ul>${lines}</ul>` }];
   });
   if (!rows.length) return 0;
   const { error: insertError } = await admin.from("email_outbox").upsert(rows, { onConflict: "dedupe_key", ignoreDuplicates: true });
