@@ -1,11 +1,11 @@
 "use client";
 
 import { useActionState } from "react";
-import { signIn, type LoginState } from "@/features/identity/controllers/auth.actions";
+import { requestSignInLink, type LoginState } from "@/features/identity/controllers/auth.actions";
 
 const initialState: LoginState = {};
 
-export function LoginForm() {
-  const [state, action, pending] = useActionState(signIn, initialState);
-  return <form action={action} className="login-form"><label>Email<input name="email" type="email" autoComplete="email" required placeholder="you@agency.co.uk" /></label><label>Password<input name="password" type="password" autoComplete="current-password" required /></label>{state.error ? <p className="form-error">{state.error}</p> : null}<button className="button button-primary login-button" type="submit" disabled={pending}>{pending ? "Signing in…" : "Sign in"}</button></form>;
+export function LoginForm({ configured, localDevelopment }: { configured: boolean; localDevelopment: boolean }) {
+  const [state, action, pending] = useActionState(requestSignInLink, initialState);
+  return <form action={action} className="login-form"><label>Work email<input name="email" type="email" autoComplete="email" required placeholder={localDevelopment ? "alex.morgan@taskhub.demo" : "you@agency.co.uk"} disabled={!configured || pending} /></label>{localDevelopment ? <p className="login-local-hint">Local test account: <code>alex.morgan@taskhub.demo</code></p> : null}{state.error ? <p className="form-error" role="alert">{state.error}</p> : null}{state.sent ? <p className="form-success">If this email belongs to an invited team member, a secure sign-in link is on its way.</p> : null}<button className="button button-primary login-button" type="submit" disabled={!configured || pending}>{pending ? "Sending link…" : "Email me a sign-in link"}</button></form>;
 }

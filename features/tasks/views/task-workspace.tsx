@@ -8,17 +8,17 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleCheckBig,
-  Columns3,
-  LayoutDashboard,
-  ListFilter,
   ListTodo,
   Plus,
   Search,
+  SearchX,
   X,
 } from "lucide-react";
 import { useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { useRouter } from "next/navigation";
 import { ROLE_LABELS, canManageTeamWork } from "@/features/identity/models/roles";
+import { AccountMenu } from "@/features/identity/views/account-menu";
+import { WorkspaceSidebar } from "@/features/navigation/views/workspace-sidebar";
 import { createTaskAction, updateTaskStatusAction } from "@/features/tasks/controllers/task.actions";
 import { buildOverview } from "@/features/reports/services/overview.service";
 import { DEFAULT_FILTERS, matchesTaskFilters, todayKey, type TaskFilters } from "@/features/tasks/models/task-filters";
@@ -34,7 +34,7 @@ import {
   type Team,
 } from "@/features/tasks/models/task";
 
-type WorkspaceView = "overview" | "list" | "calendar" | "board";
+export type WorkspaceView = "overview" | "list" | "calendar" | "board";
 type ComposerState = { title: string; clientId: string; ownerId: string; priority: TaskPriority; dueDate: string };
 
 type TaskWorkspaceProps = {
@@ -43,20 +43,31 @@ type TaskWorkspaceProps = {
   people: Person[];
   clients: Client[];
   teams: Team[];
-  initialView?: string;
+  initialView?: WorkspaceView;
   initialFilters?: TaskFilters;
-  isDemo: boolean;
 };
 
-const VIEWS: Array<{ id: WorkspaceView; label: string; icon: typeof LayoutDashboard }> = [
-  { id: "overview", label: "Overview", icon: LayoutDashboard },
-  { id: "list", label: "List", icon: ListTodo },
-  { id: "calendar", label: "Calendar", icon: CalendarDays },
-  { id: "board", label: "Kanban", icon: Columns3 },
+const VIEWS: Array<{ id: WorkspaceView; label: string; href: string }> = [
+  { id: "overview", label: "Overview", href: "/overview" },
+  { id: "list", label: "List", href: "/list" },
+  { id: "calendar", label: "Calendar", href: "/calendar" },
+  { id: "board", label: "Kanban", href: "/kanban" },
 ];
 
-function isWorkspaceView(value: string | undefined): value is WorkspaceView {
-  return Boolean(value && VIEWS.some((view) => view.id === value));
+function writeFilterParams(params: URLSearchParams, filters: TaskFilters) {
+  const filterEntries: Array<[string, string]> = [
+    ["client", filters.clientId],
+    ["team", filters.teamId],
+    ["owner", filters.ownerId],
+    ["status", filters.status],
+    ["priority", filters.priority],
+    ["due", filters.due],
+    ["q", filters.query],
+  ];
+  for (const [key, value] of filterEntries) {
+    if (!value || value === "all") params.delete(key);
+    else params.set(key, value);
+  }
 }
 
 function formatDate(date: string) {
@@ -83,11 +94,11 @@ function PriorityDot({ priority }: { priority: TaskPriority }) {
   return <span className={`priority priority-${priority}`}>{TASK_PRIORITY_LABELS[priority]}</span>;
 }
 
-export function TaskWorkspace({ initialActorId, initialTasks, people, clients, teams, initialView, initialFilters = DEFAULT_FILTERS, isDemo }: TaskWorkspaceProps) {
+export function TaskWorkspace({ initialActorId, initialTasks, people, clients, teams, initialView, initialFilters = DEFAULT_FILTERS }: TaskWorkspaceProps) {
   const router = useRouter();
-  const [actorId, setActorId] = useState(initialActorId);
   const [tasks, setTasks] = useState(initialTasks);
-  const [view, setView] = useState<WorkspaceView>(isWorkspaceView(initialView) ? initialView : "overview");
+  const view = initialView ?? "overview";
+  const activeView = VIEWS.find((item) => item.id === view) ?? VIEWS[0];
   const [filters, setFilters] = useState<TaskFilters>(initialFilters);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [showComposer, setShowComposer] = useState(false);
@@ -98,8 +109,11 @@ export function TaskWorkspace({ initialActorId, initialTasks, people, clients, t
     priority: "medium",
     dueDate: todayKey(),
   }));
-  const [notice, setNotice] = useState(isDemo ? "Demo workspace — connect Supabase to persist this data." : "Connected workspace — Supabase Auth and RLS are active.");
-  const actor = people.find((person) => person.id === actorId) ?? people[0];
+  const [notice, setNotice] = useState("Your Bespoke workspace is connected and protected by Supabase Auth and RLS.");
+  const foundActor = people.find((person) => person.id === initialActorId);
+
+  if (!foundActor) throw new Error("Your signed-in profile is not available in this workspace.");
+  const actor = foundActor;
 
   const roleScopedTasks = useMemo(() => {
     if (actor.role === "senior_director") return tasks;
@@ -109,45 +123,34 @@ export function TaskWorkspace({ initialActorId, initialTasks, people, clients, t
   const overview = useMemo(() => buildOverview(roleScopedTasks, people, clients), [clients, people, roleScopedTasks]);
   const selectedTask = tasks.find((task) => task.id === selectedTaskId) ?? null;
   const canManage = canManageTeamWork(actor.role);
-  const availableOwners = people.filter((person) => person.role === "team_member" && (actor.role === "senior_director" || person.teamId === actor.teamId));
+  const availableOwners = people.filter((person) => person.isActive && person.role === "team_member" && (actor.role === "senior_director" || person.teamId === actor.teamId));
+  const navigationLinks = Object.fromEntries(VIEWS.map((item) => [item.id, hrefForView(item.id)]));
 
-  function syncUrl(nextFilters: TaskFilters, nextView = view) {
+  function syncUrl(nextFilters: TaskFilters) {
     const params = new URLSearchParams(window.location.search);
-    const filterEntries: Array<[string, string]> = [
-      ["client", nextFilters.clientId],
-      ["team", nextFilters.teamId],
-      ["owner", nextFilters.ownerId],
-      ["status", nextFilters.status],
-      ["priority", nextFilters.priority],
-      ["due", nextFilters.due],
-      ["q", nextFilters.query],
-    ];
-    for (const [key, value] of filterEntries) {
-      if (!value || value === "all") params.delete(key);
-      else params.set(key, value);
-    }
-    if (nextView === "overview") params.delete("view");
-    else params.set("view", nextView);
+    params.delete("view");
+    writeFilterParams(params, nextFilters);
     const query = params.toString();
     window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
   }
 
+  function hrefForView(nextView: WorkspaceView) {
+    const target = VIEWS.find((item) => item.id === nextView) ?? VIEWS[0];
+    const params = new URLSearchParams();
+    writeFilterParams(params, filters);
+    const query = params.toString();
+    return `${target.href}${query ? `?${query}` : ""}`;
+  }
+
   function updateFilters(patch: Partial<TaskFilters>) {
-    setFilters((current) => {
-      const next = { ...current, ...patch };
-      syncUrl(next);
-      return next;
-    });
+    const next = { ...filters, ...patch };
+    setFilters(next);
+    syncUrl(next);
   }
 
   function resetFilters() {
     setFilters(DEFAULT_FILTERS);
     syncUrl(DEFAULT_FILTERS);
-  }
-
-  function changeView(nextView: WorkspaceView) {
-    setView(nextView);
-    syncUrl(filters, nextView);
   }
 
   function openComposer() {
@@ -165,12 +168,10 @@ export function TaskWorkspace({ initialActorId, initialTasks, people, clients, t
     const before = tasks;
     setTasks((current) => current.map((task) => task.id === taskId ? { ...task, status, completedAt: status === "complete" ? todayKey() : null } : task));
     setNotice(`${target.title} moved to ${TASK_STATUS_LABELS[status]}.`);
-    if (!isDemo) {
-      void updateTaskStatusAction(taskId, status).then(() => router.refresh()).catch(() => {
-        setTasks(before);
-        setNotice("The update could not be saved. Your previous task state has been restored.");
-      });
-    }
+    void updateTaskStatusAction(taskId, status).then(() => router.refresh()).catch(() => {
+      setTasks(before);
+      setNotice("The update could not be saved. Your previous task state has been restored.");
+    });
   }
 
   function createTask() {
@@ -185,36 +186,31 @@ export function TaskWorkspace({ initialActorId, initialTasks, people, clients, t
     setShowComposer(false);
     setComposer((current) => ({ ...current, title: "" }));
     setNotice(`${owner.name} has been allocated “${newTask.title}”. An assignment email is queued in production.`);
-    if (!isDemo) {
-      void createTaskAction({ title: newTask.title, description: newTask.description, clientId: newTask.clientId, ownerId: newTask.ownerId, priority: newTask.priority, dueDate: newTask.dueDate }).then(() => router.refresh()).catch(() => {
-        setTasks((current) => current.filter((task) => task.id !== newTask.id));
-        setNotice("The task could not be saved. No allocation email was sent.");
-      });
-    }
+    void createTaskAction({ title: newTask.title, description: newTask.description, clientId: newTask.clientId, ownerId: newTask.ownerId, priority: newTask.priority, dueDate: newTask.dueDate }).then(() => router.refresh()).catch(() => {
+      setTasks((current) => current.filter((task) => task.id !== newTask.id));
+      setNotice("The task could not be saved. No allocation email was sent.");
+    });
   }
 
   return (
     <main className="workspace-shell">
-      <aside className="sidebar">
-        <div className="brand"><span className="brand-mark">T</span><span>Task Hub</span></div>
-        <p className="workspace-label">Internal workflow</p>
-        <nav aria-label="Workspace views" className="workspace-nav">
-          {VIEWS.map((item) => {
-            const Icon = item.icon;
-            return <button className={view === item.id ? "nav-item nav-item-active" : "nav-item"} key={item.id} onClick={() => changeView(item.id)} type="button"><Icon size={18} aria-hidden="true" />{item.label}</button>;
-          })}
-        </nav>
-        <div className="sidebar-footer">{isDemo ? <><span className="eyebrow">Assessment mode</span><p>Switch personas to demonstrate the three reporting levels.</p><label className="sr-only" htmlFor="demo-role">Demo persona</label><select id="demo-role" value={actorId} onChange={(event) => setActorId(event.target.value)}><option value="director-1">Alex — Senior Director</option><option value="ad-north">Sophie — North AD</option><option value="ad-south">Marcus — South AD</option><option value="zoe">Zoe — North team</option><option value="olivia">Olivia — South team</option></select></> : <><span className="eyebrow">Secure session</span><p>Data visibility is governed by your signed-in role and team.</p></>}</div>
-      </aside>
+      <WorkspaceSidebar active={view} links={navigationLinks} showTeamManagement={actor.role === "senior_director"} />
 
       <section className="workspace-main">
-        <header className="topbar"><div><p className="eyebrow">{ROLE_LABELS[actor.role]}</p><h1>Good morning, {actor.name.split(" ")[0]}.</h1></div><div className="topbar-actions"><span className="avatar avatar-large">{actor.initials}</span>{canManage ? <button className="button button-primary" onClick={openComposer} type="button"><Plus size={17} aria-hidden="true" />Allocate task</button> : null}</div></header>
-        <div className="notice" role="status"><CircleCheckBig size={17} aria-hidden="true" />{notice}</div>
-        <FilterBar clients={clients} filters={filters} people={people} teams={teams} onChange={updateFilters} onReset={resetFilters} />
-        {view === "overview" ? <OverviewPanel overview={overview} tasks={filteredTasks} clients={clients} people={people} onSelectTask={setSelectedTaskId} /> : null}
-        {view === "list" ? <ListPanel tasks={filteredTasks} clients={clients} people={people} onSelectTask={setSelectedTaskId} /> : null}
-        {view === "calendar" ? <CalendarPanel tasks={filteredTasks} clients={clients} onSelectTask={setSelectedTaskId} /> : null}
-        {view === "board" ? <BoardPanel tasks={filteredTasks} clients={clients} people={people} onMove={updateStatus} onSelectTask={setSelectedTaskId} /> : null}
+        <header className="workspace-header">
+          <p className="workspace-header-context"><span>Workspace</span><span aria-hidden="true">/</span><strong>{activeView.label}</strong></p>
+          <AccountMenu initials={actor.initials} name={actor.name} role={actor.role} />
+        </header>
+        <div className="workspace-content">
+          <header className="topbar"><div><p className="eyebrow">{ROLE_LABELS[actor.role]}</p><h1>Good morning, {actor.name.split(" ")[0]}.</h1></div><div className="topbar-actions"><span className="avatar avatar-large">{actor.initials}</span>{canManage ? <button className="button button-primary" onClick={openComposer} type="button"><Plus size={17} aria-hidden="true" />Allocate task</button> : null}</div></header>
+          <div className="notice" role="status"><CircleCheckBig size={17} aria-hidden="true" />{notice}</div>
+          <FilterBar clients={clients} filters={filters} people={people} teams={teams} onChange={updateFilters} onReset={resetFilters} />
+          {view === "overview" ? <OverviewPanel overview={overview} tasks={filteredTasks} clients={clients} people={people} onSelectTask={setSelectedTaskId} onViewAll={() => router.push(hrefForView("list"))} /> : null}
+          {view !== "overview" && filteredTasks.length === 0 ? <EmptyTasks onReset={resetFilters} /> : null}
+          {view === "list" && filteredTasks.length > 0 ? <ListPanel tasks={filteredTasks} clients={clients} people={people} onSelectTask={setSelectedTaskId} /> : null}
+          {view === "calendar" && filteredTasks.length > 0 ? <CalendarPanel tasks={filteredTasks} clients={clients} onSelectTask={setSelectedTaskId} /> : null}
+          {view === "board" && filteredTasks.length > 0 ? <BoardPanel tasks={filteredTasks} clients={clients} people={people} onMove={updateStatus} onSelectTask={setSelectedTaskId} /> : null}
+        </div>
       </section>
 
       {selectedTask ? <TaskDetail task={selectedTask} people={people} clients={clients} onClose={() => setSelectedTaskId(null)} onStatusChange={updateStatus} canUpdate={canManage || selectedTask.ownerId === actor.id} /> : null}
@@ -224,11 +220,12 @@ export function TaskWorkspace({ initialActorId, initialTasks, people, clients, t
 }
 
 function FilterBar({ clients, filters, people, teams, onChange, onReset }: { clients: Client[]; filters: TaskFilters; people: Person[]; teams: Team[]; onChange: (patch: Partial<TaskFilters>) => void; onReset: () => void }) {
-  return <section className="filter-bar" aria-label="Task filters"><div className="search-field"><Search size={17} aria-hidden="true" /><input value={filters.query} onChange={(event) => onChange({ query: event.target.value })} placeholder="Search tasks" aria-label="Search tasks" /></div><select value={filters.clientId} onChange={(event) => onChange({ clientId: event.target.value })} aria-label="Filter by client"><option value="all">All clients</option>{clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</select><select value={filters.teamId} onChange={(event) => onChange({ teamId: event.target.value })} aria-label="Filter by team"><option value="all">All teams</option>{teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}</select><select value={filters.ownerId} onChange={(event) => onChange({ ownerId: event.target.value })} aria-label="Filter by owner"><option value="all">All owners</option>{people.filter((person) => person.role === "team_member").map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select><select value={filters.status} onChange={(event) => onChange({ status: event.target.value as TaskFilters["status"] })} aria-label="Filter by status"><option value="all">All statuses</option>{TASK_STATUSES.map((status) => <option key={status} value={status}>{TASK_STATUS_LABELS[status]}</option>)}</select><select value={filters.priority} onChange={(event) => onChange({ priority: event.target.value as TaskFilters["priority"] })} aria-label="Filter by priority"><option value="all">All priorities</option>{Object.entries(TASK_PRIORITY_LABELS).map(([priority, label]) => <option key={priority} value={priority}>{label}</option>)}</select><select value={filters.due} onChange={(event) => onChange({ due: event.target.value as TaskFilters["due"] })} aria-label="Filter by due date"><option value="all">Any deadline</option><option value="overdue">Overdue</option><option value="today">Due today</option><option value="week">Due this week</option></select><button className="icon-button" type="button" onClick={onReset} aria-label="Clear all filters"><ListFilter size={18} /></button></section>;
+  const hasActiveFilters = filters.query.trim().length > 0 || filters.clientId !== "all" || filters.teamId !== "all" || filters.ownerId !== "all" || filters.status !== "all" || filters.priority !== "all" || filters.due !== "all";
+  return <section className="filter-bar" aria-label="Task filters"><div className="search-field"><Search size={17} aria-hidden="true" /><input value={filters.query} onChange={(event) => onChange({ query: event.target.value })} placeholder="Search tasks" aria-label="Search tasks" /></div><select value={filters.clientId} onChange={(event) => onChange({ clientId: event.target.value })} aria-label="Filter by client"><option value="all">All clients</option>{clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</select><select value={filters.teamId} onChange={(event) => onChange({ teamId: event.target.value })} aria-label="Filter by team"><option value="all">All teams</option>{teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}</select><select value={filters.ownerId} onChange={(event) => onChange({ ownerId: event.target.value })} aria-label="Filter by owner"><option value="all">All owners</option>{people.filter((person) => person.role === "team_member").map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select><select value={filters.status} onChange={(event) => onChange({ status: event.target.value as TaskFilters["status"] })} aria-label="Filter by status"><option value="all">All statuses</option>{TASK_STATUSES.map((status) => <option key={status} value={status}>{TASK_STATUS_LABELS[status]}</option>)}</select><select value={filters.priority} onChange={(event) => onChange({ priority: event.target.value as TaskFilters["priority"] })} aria-label="Filter by priority"><option value="all">All priorities</option>{Object.entries(TASK_PRIORITY_LABELS).map(([priority, label]) => <option key={priority} value={priority}>{label}</option>)}</select><select value={filters.due} onChange={(event) => onChange({ due: event.target.value as TaskFilters["due"] })} aria-label="Filter by due date"><option value="all">Any deadline</option><option value="overdue">Overdue</option><option value="today">Due today</option><option value="week">Due this week</option></select><button className="icon-button filter-clear" type="button" onClick={onReset} aria-label="Clear all filters" title="Clear all filters" disabled={!hasActiveFilters}><X size={17} aria-hidden="true" /><span>Clear</span></button></section>;
 }
 
-function OverviewPanel({ overview, tasks, clients, people, onSelectTask }: { overview: ReturnType<typeof buildOverview>; tasks: Task[]; clients: Client[]; people: Person[]; onSelectTask: (id: string) => void }) {
-  return <div className="page-stack"><section className="metric-grid" aria-label="Operational overview"><Metric label="Open work" value={overview.open} context="Across your visible workload" icon={<ListTodo size={21} />} /><Metric label="Overdue" value={overview.overdue} context="Needs immediate attention" icon={<AlertTriangle size={21} />} tone="danger" /><Metric label="Due in 7 days" value={overview.dueSoon} context="Plan capacity early" icon={<CalendarDays size={21} />} tone="accent" /><Metric label="Completion" value={`${overview.completionRate}%`} context={`${overview.onTimeRate}% completed on time`} icon={<CheckCircle2 size={21} />} tone="success" /></section><section className="content-grid content-grid-wide"><div className="panel panel-large"><div className="panel-heading"><div><p className="eyebrow">Director signal</p><h2>Client delivery health</h2></div><span className="muted">Current workload</span></div><div className="health-list">{overview.byClient.map((row) => <div className="health-row" key={row.label}><div><strong>{row.label}</strong><span>{row.total} active and completed tasks</span></div><div className="health-track"><span style={{ width: `${Math.min(100, row.total * 18)}%` }} /></div><span className={row.overdue ? "risk risk-danger" : "risk"}>{row.overdue ? `${row.overdue} overdue` : "On track"}</span></div>)}</div></div><div className="panel"><div className="panel-heading"><div><p className="eyebrow">Capacity</p><h2>Team workload</h2></div></div><div className="workload-list">{overview.byOwner.map((row) => <div className="workload-row" key={row.label}><span className="avatar">{row.label.split(" ").map((part) => part[0]).join("")}</span><div><strong>{row.label}</strong><span>{row.open} open tasks</span></div><span className={row.overdue ? "count-alert" : "count-muted"}>{row.overdue || "—"}</span></div>)}</div></div></section><section className="panel"><div className="panel-heading"><div><p className="eyebrow">Priority queue</p><h2>Tasks needing attention</h2></div><button type="button" className="text-button">View all <ArrowRight size={15} /></button></div><CompactTaskList tasks={tasks.filter((task) => task.status !== "complete").slice(0, 5)} clients={clients} people={people} onSelectTask={onSelectTask} /></section></div>;
+function OverviewPanel({ overview, tasks, clients, people, onSelectTask, onViewAll }: { overview: ReturnType<typeof buildOverview>; tasks: Task[]; clients: Client[]; people: Person[]; onSelectTask: (id: string) => void; onViewAll: () => void }) {
+  return <div className="page-stack"><section className="metric-grid" aria-label="Operational overview"><Metric label="Open work" value={overview.open} context="Across your visible workload" icon={<ListTodo size={21} />} /><Metric label="Overdue" value={overview.overdue} context="Needs immediate attention" icon={<AlertTriangle size={21} />} tone="danger" /><Metric label="Due in 7 days" value={overview.dueSoon} context="Plan capacity early" icon={<CalendarDays size={21} />} tone="accent" /><Metric label="Completion" value={`${overview.completionRate}%`} context={`${overview.onTimeRate}% completed on time`} icon={<CheckCircle2 size={21} />} tone="success" /></section><section className="content-grid content-grid-wide"><div className="panel panel-large"><div className="panel-heading"><div><p className="eyebrow">Director signal</p><h2>Client delivery health</h2></div><span className="muted">Current workload</span></div><div className="health-list">{overview.byClient.map((row) => <div className="health-row" key={row.label}><div><strong>{row.label}</strong><span>{row.total} active and completed tasks</span></div><div className="health-track"><span style={{ width: `${Math.min(100, row.total * 18)}%` }} /></div><span className={row.overdue ? "risk risk-danger" : "risk"}>{row.overdue ? `${row.overdue} overdue` : "On track"}</span></div>)}</div></div><div className="panel"><div className="panel-heading"><div><p className="eyebrow">Capacity</p><h2>Team workload</h2></div></div><div className="workload-list">{overview.byOwner.map((row) => <div className="workload-row" key={row.label}><span className="avatar">{row.label.split(" ").map((part) => part[0]).join("")}</span><div><strong>{row.label}</strong><span>{row.open} open tasks</span></div><span className={row.overdue ? "count-alert" : "count-muted"}>{row.overdue || "—"}</span></div>)}</div></div></section><section className="panel"><div className="panel-heading"><div><p className="eyebrow">Priority queue</p><h2>Tasks needing attention</h2></div><button type="button" className="text-button" onClick={onViewAll}>View all <ArrowRight size={15} aria-hidden="true" /></button></div><CompactTaskList tasks={tasks.filter((task) => task.status !== "complete").slice(0, 5)} clients={clients} people={people} onSelectTask={onSelectTask} /></section></div>;
 }
 
 function Metric({ label, value, context, icon, tone = "default" }: { label: string; value: string | number; context: string; icon: ReactNode; tone?: "default" | "danger" | "accent" | "success" }) {
@@ -236,16 +233,21 @@ function Metric({ label, value, context, icon, tone = "default" }: { label: stri
 }
 
 function CompactTaskList({ tasks, clients, people, onSelectTask }: { tasks: Task[]; clients: Client[]; people: Person[]; onSelectTask: (id: string) => void }) {
+  if (tasks.length === 0) return <div className="compact-empty"><CheckCircle2 size={20} aria-hidden="true" /><span><strong>Nothing needs attention</strong><small>Your current filters have no open tasks.</small></span></div>;
   return <div className="compact-list">{tasks.map((task) => { const owner = ownerFor(task, people); return <button className="compact-task" onClick={() => onSelectTask(task.id)} type="button" key={task.id}><span className={`priority-marker priority-${task.priority}`} /><span className="compact-task-main"><strong>{task.title}</strong><small>{clientFor(task, clients)?.name} · Due {formatDate(task.dueDate)}</small></span><span className="avatar">{owner?.initials}</span><StatusBadge status={task.status} /></button>; })}</div>;
 }
 
+function EmptyTasks({ onReset }: { onReset: () => void }) {
+  return <section className="empty-state" aria-live="polite"><span className="empty-state-icon"><SearchX size={24} aria-hidden="true" /></span><p className="eyebrow">No matching tasks</p><h2>Try a broader filter</h2><p>Clear the current filters to return to your complete visible workload.</p><button type="button" className="button button-primary" onClick={onReset}>Clear filters</button></section>;
+}
+
 function ListPanel({ tasks, clients, people, onSelectTask }: { tasks: Task[]; clients: Client[]; people: Person[]; onSelectTask: (id: string) => void }) {
-  return <section className="panel task-list-panel"><div className="panel-heading"><div><p className="eyebrow">List view</p><h2>{tasks.length} matching tasks</h2></div></div><div className="table-wrap"><table><thead><tr><th>Task</th><th>Client</th><th>Owner</th><th>Deadline</th><th>Priority</th><th>Status</th></tr></thead><tbody>{tasks.map((task) => { const owner = ownerFor(task, people); return <tr key={task.id} onClick={() => onSelectTask(task.id)} tabIndex={0}><td><strong>{task.title}</strong><span>{task.description}</span></td><td>{clientFor(task, clients)?.name}</td><td><span className="person-cell"><span className="avatar">{owner?.initials}</span>{owner?.name}</span></td><td className={task.status !== "complete" && task.dueDate < todayKey() ? "deadline-overdue" : ""}>{formatDate(task.dueDate)}</td><td><PriorityDot priority={task.priority} /></td><td><StatusBadge status={task.status} /></td></tr>; })}</tbody></table></div></section>;
+  return <section className="panel task-list-panel"><div className="panel-heading"><div><p className="eyebrow">List view</p><h2>{tasks.length} matching tasks</h2></div></div><div className="table-wrap"><table><thead><tr><th>Task</th><th>Client</th><th>Owner</th><th>Deadline</th><th>Priority</th><th>Status</th></tr></thead><tbody>{tasks.map((task) => { const owner = ownerFor(task, people); return <tr key={task.id} onClick={() => onSelectTask(task.id)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelectTask(task.id); } }} role="button" tabIndex={0}><td><strong>{task.title}</strong><span>{task.description}</span></td><td>{clientFor(task, clients)?.name}</td><td><span className="person-cell"><span className="avatar">{owner?.initials}</span>{owner?.name}</span></td><td className={task.status !== "complete" && task.dueDate < todayKey() ? "deadline-overdue" : ""}>{formatDate(task.dueDate)}</td><td><PriorityDot priority={task.priority} /></td><td><StatusBadge status={task.status} /></td></tr>; })}</tbody></table></div></section>;
 }
 
 function CalendarPanel({ tasks, clients, onSelectTask }: { tasks: Task[]; clients: Client[]; onSelectTask: (id: string) => void }) {
-  const current = new Date(); const year = current.getFullYear(); const month = current.getMonth(); const firstDay = new Date(year, month, 1).getDay(); const days = new Date(year, month + 1, 0).getDate(); const cells = Array.from({ length: firstDay + days }, (_, index) => index < firstDay ? null : index - firstDay + 1); const dateForDay = (day: number) => new Date(year, month, day, 12).toISOString().slice(0, 10);
-  return <section className="panel calendar-panel"><div className="panel-heading"><div><p className="eyebrow">Calendar view</p><h2>{current.toLocaleDateString("en-GB", { month: "long", year: "numeric" })}</h2></div><div className="calendar-arrows"><button className="icon-button" type="button" aria-label="Previous month"><ChevronLeft size={18} /></button><button className="icon-button" type="button" aria-label="Next month"><ChevronRight size={18} /></button></div></div><div className="calendar-weekdays">{["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => <span key={day}>{day}</span>)}</div><div className="calendar-grid">{cells.map((day, index) => { const key = day ? dateForDay(day) : `blank-${index}`; const dayTasks = day ? tasks.filter((task) => task.dueDate === key) : []; return <div className={day ? `calendar-cell ${key === todayKey() ? "calendar-today" : ""}` : "calendar-cell calendar-empty"} key={key}>{day ? <><span className="calendar-date">{day}</span>{dayTasks.slice(0, 3).map((task) => <button className={`calendar-task priority-${task.priority}`} type="button" key={task.id} onClick={() => onSelectTask(task.id)}>{task.title}<small>{clientFor(task, clients)?.name}</small></button>)}</> : null}</div>; })}</div></section>;
+  const [visibleMonth, setVisibleMonth] = useState(() => { const today = new Date(); return new Date(today.getFullYear(), today.getMonth(), 1); }); const year = visibleMonth.getFullYear(); const month = visibleMonth.getMonth(); const firstDay = new Date(year, month, 1).getDay(); const days = new Date(year, month + 1, 0).getDate(); const cells = Array.from({ length: firstDay + days }, (_, index) => index < firstDay ? null : index - firstDay + 1); const dateForDay = (day: number) => new Date(year, month, day, 12).toISOString().slice(0, 10); const changeMonth = (offset: number) => setVisibleMonth((current) => new Date(current.getFullYear(), current.getMonth() + offset, 1));
+  return <section className="panel calendar-panel"><div className="panel-heading"><div><p className="eyebrow">Calendar view</p><h2 aria-live="polite">{visibleMonth.toLocaleDateString("en-GB", { month: "long", year: "numeric" })}</h2></div><div className="calendar-arrows"><button className="icon-button" type="button" aria-label="Previous month" onClick={() => changeMonth(-1)}><ChevronLeft size={18} aria-hidden="true" /></button><button className="icon-button" type="button" aria-label="Next month" onClick={() => changeMonth(1)}><ChevronRight size={18} aria-hidden="true" /></button></div></div><div className="calendar-weekdays">{["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => <span key={day}>{day}</span>)}</div><div className="calendar-grid">{cells.map((day, index) => { const key = day ? dateForDay(day) : `blank-${index}`; const dayTasks = day ? tasks.filter((task) => task.dueDate === key) : []; return <div className={day ? `calendar-cell ${key === todayKey() ? "calendar-today" : ""}` : "calendar-cell calendar-empty"} key={key}>{day ? <><span className="calendar-date">{day}</span>{dayTasks.slice(0, 3).map((task) => <button className={`calendar-task priority-${task.priority}`} type="button" key={task.id} onClick={() => onSelectTask(task.id)}>{task.title}<small>{clientFor(task, clients)?.name}</small></button>)}</> : null}</div>; })}</div></section>;
 }
 
 function BoardPanel({ tasks, clients, people, onMove, onSelectTask }: { tasks: Task[]; clients: Client[]; people: Person[]; onMove: (id: string, status: TaskStatus) => void; onSelectTask: (id: string) => void }) {

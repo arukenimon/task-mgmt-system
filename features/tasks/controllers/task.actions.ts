@@ -10,7 +10,7 @@ export async function createTaskAction(input: unknown) {
   if (!canAllocate(profile.role)) throw new Error("Only managers can allocate tasks.");
   const teamId = profile.role === "senior_director"
     ? (await getTaskOwnerTeam(taskInput.ownerId))
-    : profile.team_id;
+    : profile.teamId;
   if (!teamId) throw new Error("A team is required to allocate this task.");
   const task = await insertTask(profile.id, teamId, taskInput);
   revalidatePath("/");
@@ -28,7 +28,7 @@ export async function updateTaskStatusAction(taskId: string, status: unknown) {
 async function getTaskOwnerTeam(ownerId: string) {
   const { createClient } = await import("@/lib/supabase/server");
   const supabase = await createClient();
-  const { data, error } = await supabase.from("profiles").select("team_id, role").eq("id", ownerId).single();
-  if (error || !data || data.role !== "team_member" || !data.team_id) throw new Error("Select a valid team member.");
+  const { data, error } = await supabase.from("profiles").select("team_id, role, is_active").eq("id", ownerId).single();
+  if (error || !data || data.role !== "team_member" || !data.team_id || !data.is_active) throw new Error("Select an active team member.");
   return data.team_id;
 }

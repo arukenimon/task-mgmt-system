@@ -6,7 +6,7 @@ import { Resend } from "resend";
 export type EmailMessage = { to: string; subject: string; html: string };
 
 export async function sendEmail(message: EmailMessage) {
-  const from = process.env.EMAIL_FROM ?? "Task Hub <tasks@local.test>";
+  const from = process.env.EMAIL_FROM ?? "Bespoke <tasks@local.test>";
   if (process.env.EMAIL_PROVIDER === "resend") {
     const apiKey = process.env.RESEND_API_KEY;
     if (!apiKey) throw new Error("RESEND_API_KEY is required when EMAIL_PROVIDER=resend.");
@@ -17,7 +17,7 @@ export async function sendEmail(message: EmailMessage) {
 
   const transport = nodemailer.createTransport({
     host: process.env.MAILPIT_HOST ?? "127.0.0.1",
-    port: Number(process.env.MAILPIT_PORT ?? 54325),
+    port: Number(process.env.MAILPIT_PORT ?? 55425),
     secure: false,
   });
   await transport.sendMail({ from, to: message.to, subject: message.subject, html: message.html });
