@@ -34,6 +34,7 @@ export type Person = {
   email: string;
   role: Role;
   teamId: string | null;
+  isActive: boolean;
 };
 
 export type Client = { id: string; name: string; accountLeadId: string | null };
@@ -82,6 +83,7 @@ export const demoPeople: Person[] = [
     email: "alex.morgan@taskhub.demo",
     role: "senior_director",
     teamId: null,
+    isActive: true,
   },
   {
     id: "ad-north",
@@ -90,6 +92,7 @@ export const demoPeople: Person[] = [
     email: "sophie.turner@taskhub.demo",
     role: "account_director",
     teamId: "north",
+    isActive: true,
   },
   {
     id: "ad-south",
@@ -98,6 +101,7 @@ export const demoPeople: Person[] = [
     email: "marcus.reed@taskhub.demo",
     role: "account_director",
     teamId: "south",
+    isActive: true,
   },
   {
     id: "zoe",
@@ -106,6 +110,7 @@ export const demoPeople: Person[] = [
     email: "zoe.patel@taskhub.demo",
     role: "team_member",
     teamId: "north",
+    isActive: true,
   },
   {
     id: "liam",
@@ -114,6 +119,7 @@ export const demoPeople: Person[] = [
     email: "liam.chen@taskhub.demo",
     role: "team_member",
     teamId: "north",
+    isActive: true,
   },
   {
     id: "olivia",
@@ -122,6 +128,7 @@ export const demoPeople: Person[] = [
     email: "olivia.grant@taskhub.demo",
     role: "team_member",
     teamId: "south",
+    isActive: true,
   },
   {
     id: "noah",
@@ -130,6 +137,7 @@ export const demoPeople: Person[] = [
     email: "noah.williams@taskhub.demo",
     role: "team_member",
     teamId: "south",
+    isActive: true,
   },
 ];
 
