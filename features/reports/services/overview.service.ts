@@ -7,7 +7,7 @@ export type Overview = {
   dueSoon: number;
   completionRate: number;
   onTimeRate: number;
-  byClient: Array<{ label: string; total: number; overdue: number }>;
+  byClient: Array<{ label: string; total: number; completed: number; overdue: number }>;
   byOwner: Array<{ label: string; open: number; overdue: number }>;
 };
 
@@ -34,6 +34,7 @@ export function buildOverview(tasks: Task[], people: Person[], clients: Client[]
         return {
           label: client.name,
           total: clientTasks.length,
+          completed: clientTasks.filter((task) => task.status === "complete").length,
           overdue: clientTasks.filter((task) => task.status !== "complete" && task.dueDate < today).length,
         };
       })

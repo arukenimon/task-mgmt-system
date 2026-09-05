@@ -27,12 +27,18 @@ function filtersFromParams(params: WorkspaceSearchParams): TaskFilters {
   };
 }
 
+function taskViewFromParams(params: WorkspaceSearchParams): Exclude<WorkspaceView, "overview"> | undefined {
+  const taskView = firstValue(params.taskView);
+  return taskView === "list" || taskView === "calendar" || taskView === "board" ? taskView : undefined;
+}
+
 export async function WorkspacePage({ searchParams, view }: WorkspacePageProps) {
   const params = await searchParams;
   const filters = filtersFromParams(params);
+  const initialTaskView = taskViewFromParams(params);
 
   if (!hasSupabaseConfig) redirect("/login");
-  const workspace = await loadWorkspaceForCurrentUser();
+  const workspace = await loadWorkspaceForCurrentUser(view === "board" ? { kanbanFilters: filters } : undefined);
   if (!workspace) redirect("/login");
 
   return (
@@ -42,6 +48,8 @@ export async function WorkspacePage({ searchParams, view }: WorkspacePageProps) 
       people={workspace.people}
       clients={workspace.clients}
       teams={workspace.teams}
+      initialKanbanPages={workspace.kanbanPages}
+      initialTaskView={initialTaskView}
       initialView={view}
       initialFilters={filters}
     />

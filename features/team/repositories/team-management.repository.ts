@@ -1,7 +1,7 @@
 import "server-only";
 
 import type { Role } from "@/features/identity/models/roles";
-import type { TeamManagementData } from "@/features/team/models/team-management";
+import { TEAM_MEMBER_PAGE_SIZE, type ManagedMember, type ManagedMemberPage, type ManagedMemberPageRequest, type TeamManagementData } from "@/features/team/models/team-management";
 import type { InviteMemberInput, UpdateMemberInput } from "@/features/team/models/team-management.schemas";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -11,35 +11,85 @@ function assertRole(value: string): Role {
   throw new Error("A profile contains an invalid role.");
 }
 
-export async function loadTeamManagementData(): Promise<TeamManagementData> {
-  const supabase = await createClient();
-  const [teamsResult, profilesResult, tasksResult] = await Promise.all([
-    supabase.from("teams").select("id,name").order("name"),
-    supabase.from("profiles").select("id,full_name,initials,email,role,team_id,is_active").order("full_name"),
-    supabase.from("tasks").select("owner_id,status").neq("status", "complete"),
-  ]);
+function escapeIlike(value: string) {
+  return value.replace(/\\/g, "\\\\").replace(/[%_]/g, "\\$&").replace(/"/g, "\\\"");
+}
 
-  if (teamsResult.error || profilesResult.error || tasksResult.error) {
-    throw new Error("Unable to load team management data.");
-  }
+function asManagedMember(profile: { id: string; full_name: string; initials: string; email: string; role: string; team_id: string | null; is_active: boolean }, openTaskCount: number): ManagedMember {
+  return {
+    id: profile.id,
+    name: profile.full_name,
+    initials: profile.initials,
+    email: profile.email,
+    role: assertRole(profile.role),
+    teamId: profile.team_id,
+    isActive: profile.is_active,
+    openTaskCount,
+  };
+}
+
+export async function loadManagedMemberPage({ query: searchQuery, cursor = null }: ManagedMemberPageRequest): Promise<ManagedMemberPage> {
+  const supabase = await createClient();
+  const search = searchQuery.trim();
+  const matchingTeamsResult = search ? await supabase.from("teams").select("id").ilike("name", `%${escapeIlike(search)}%`) : null;
+  if (matchingTeamsResult?.error) throw new Error("Unable to search teams.");
+  const matchingTeamIds = matchingTeamsResult?.data?.map((team) => team.id) ?? [];
+  let query = supabase.from("profiles").select("id,full_name,initials,email,role,team_id,is_active", { count: "exact" });
+
+  const searchFilter = search
+    ? [
+      `full_name.ilike."%${escapeIlike(search)}%"`,
+      `email.ilike."%${escapeIlike(search)}%"`,
+      `role.ilike."%${escapeIlike(search.replace(/\s+/g, "_"))}%"`,
+      ...matchingTeamIds.length ? [`team_id.in.(${matchingTeamIds.join(",")})`] : [],
+    ].join(",")
+    : null;
+  const cursorFilter = cursor
+    ? `full_name.gt."${escapeIlike(cursor.name)}",and(full_name.eq."${escapeIlike(cursor.name)}",id.gt.${cursor.id})`
+    : null;
+  if (searchFilter && cursorFilter) query = query.or(`and(or(${searchFilter}),or(${cursorFilter}))`);
+  else if (searchFilter ?? cursorFilter) query = query.or(searchFilter ?? cursorFilter ?? "");
+
+  const { data, error, count } = await query.order("full_name").order("id").limit(TEAM_MEMBER_PAGE_SIZE + 1);
+  if (error) throw new Error("Unable to load the team directory.");
+
+  const pageProfiles = (data ?? []).slice(0, TEAM_MEMBER_PAGE_SIZE);
+  const ownerIds = pageProfiles.map((profile) => profile.id);
+  const { data: openTasks, error: openTasksError } = ownerIds.length
+    ? await supabase.from("tasks").select("owner_id").in("owner_id", ownerIds).neq("status", "complete")
+    : { data: [], error: null };
+  if (openTasksError) throw new Error("Unable to load team workloads.");
 
   const openTasksByOwner = new Map<string, number>();
-  for (const task of tasksResult.data ?? []) {
-    openTasksByOwner.set(task.owner_id, (openTasksByOwner.get(task.owner_id) ?? 0) + 1);
+  for (const task of openTasks ?? []) openTasksByOwner.set(task.owner_id, (openTasksByOwner.get(task.owner_id) ?? 0) + 1);
+  const members = pageProfiles.map((profile) => asManagedMember(profile, openTasksByOwner.get(profile.id) ?? 0));
+  const lastMember = members.at(-1);
+
+  return {
+    members,
+    total: count ?? 0,
+    nextCursor: (data?.length ?? 0) > TEAM_MEMBER_PAGE_SIZE && lastMember ? { name: lastMember.name, id: lastMember.id } : null,
+  };
+}
+
+export async function loadTeamManagementData(): Promise<TeamManagementData> {
+  const supabase = await createClient();
+  const [teamsResult, activeMembersResult, inactiveWorkResult, initialMemberPage] = await Promise.all([
+    supabase.from("teams").select("id,name").order("name"),
+    supabase.from("profiles").select("id", { count: "exact", head: true }).eq("is_active", true),
+    supabase.from("tasks").select("id,profiles!tasks_owner_id_fkey!inner(is_active)", { count: "exact", head: true }).eq("profiles.is_active", false).neq("status", "complete"),
+    loadManagedMemberPage({ query: "" }),
+  ]);
+
+  if (teamsResult.error || activeMembersResult.error || inactiveWorkResult.error) {
+    throw new Error("Unable to load team management data.");
   }
 
   return {
     teams: (teamsResult.data ?? []).map((team) => ({ id: team.id, name: team.name })),
-    members: (profilesResult.data ?? []).map((profile) => ({
-      id: profile.id,
-      name: profile.full_name,
-      initials: profile.initials,
-      email: profile.email,
-      role: assertRole(profile.role),
-      teamId: profile.team_id,
-      isActive: profile.is_active,
-      openTaskCount: openTasksByOwner.get(profile.id) ?? 0,
-    })),
+    initialMemberPage,
+    activeMemberCount: activeMembersResult.count ?? 0,
+    inactiveMemberOpenTaskCount: inactiveWorkResult.count ?? 0,
   };
 }
 
