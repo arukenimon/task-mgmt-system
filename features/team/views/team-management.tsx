@@ -10,7 +10,9 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { useActionState, useEffect, useMemo, useRef, useState } from "react";
+import { QueryClient, QueryClientProvider, useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+import { useActionState, useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { ROLE_LABELS, type Role } from "@/features/identity/models/roles";
 import { AccountMenu } from "@/features/identity/views/account-menu";
 import { WorkspaceSidebar } from "@/features/navigation/views/workspace-sidebar";
@@ -21,31 +23,36 @@ import {
   updateMemberAction,
   type TeamActionState,
 } from "@/features/team/controllers/team-management.actions";
-import type { ManagedMember, ManagedTeam } from "@/features/team/models/team-management";
+import type { ManagedMember, ManagedMemberCursor, ManagedMemberPage, ManagedTeam } from "@/features/team/models/team-management";
 
 const INITIAL_ACTION_STATE: TeamActionState = { status: "idle", message: "" };
 const EDITABLE_ROLES: Role[] = ["team_member", "account_director", "senior_director"];
 
 type TeamManagementProps = {
-  actor: { id: string; name: string; initials: string; role: Role };
+  actor: { id: string; name: string; initials: string; role: Role; teamId: string | null };
   teams: ManagedTeam[];
-  members: ManagedMember[];
+  initialMemberPage: ManagedMemberPage;
+  activeMemberCount: number;
+  inactiveMemberOpenTaskCount: number;
 };
 
-export function TeamManagement({ actor, teams, members }: TeamManagementProps) {
-  const [query, setQuery] = useState("");
-  const normalisedQuery = query.trim().toLowerCase();
-  const visibleMembers = useMemo(() => members.filter((member) => {
-    if (!normalisedQuery) return true;
-    const teamName = teams.find((team) => team.id === member.teamId)?.name ?? "organisation";
-    return `${member.name} ${member.email} ${ROLE_LABELS[member.role]} ${teamName}`.toLowerCase().includes(normalisedQuery);
-  }), [members, normalisedQuery, teams]);
-  const activeCount = members.filter((member) => member.isActive).length;
-  const unassignedWork = members.filter((member) => !member.isActive).reduce((total, member) => total + member.openTaskCount, 0);
+export function TeamManagement(props: TeamManagementProps) {
+  const [queryClient] = useState(() => new QueryClient());
+  return <QueryClientProvider client={queryClient}><TeamManagementContent {...props} /></QueryClientProvider>;
+}
+
+function TeamManagementContent({ actor, teams, initialMemberPage, activeMemberCount, inactiveMemberOpenTaskCount }: TeamManagementProps) {
+  const queryClient = useQueryClient();
+  const router = useRouter();
+  const teamName = teams.find((team) => team.id === actor.teamId)?.name ?? null;
+  const refreshDirectory = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ["team-directory"] });
+    router.refresh();
+  }, [queryClient, router]);
 
   return (
     <main className="workspace-shell">
-      <WorkspaceSidebar active="team" showTeamManagement />
+      <WorkspaceSidebar active="team" showTeamManagement teamName={teamName} />
       <section className="workspace-main">
         <header className="workspace-header">
           <p className="workspace-header-context"><span>Workspace</span><span aria-hidden="true">/</span><strong>Team management</strong></p>
@@ -59,29 +66,17 @@ export function TeamManagement({ actor, teams, members }: TeamManagementProps) {
           </header>
 
           <section className="team-stat-grid" aria-label="Team summary">
-            <TeamStat icon={<Users size={20} />} label="Active members" value={activeCount} />
+            <TeamStat icon={<Users size={20} />} label="Active members" value={activeMemberCount} />
             <TeamStat icon={<Building2 size={20} />} label="Teams" value={teams.length} />
-            <TeamStat icon={<ShieldCheck size={20} />} label="Inactive-owner tasks" value={unassignedWork} warning={unassignedWork > 0} />
+            <TeamStat icon={<ShieldCheck size={20} />} label="Tasks assigned to inactive members" value={inactiveMemberOpenTaskCount} warning={inactiveMemberOpenTaskCount > 0} />
           </section>
 
           <div className="team-management-grid">
-            <section className="panel team-directory">
-              <div className="panel-heading team-directory-heading">
-                <div><p className="eyebrow">Directory</p><h2>{members.length} people</h2></div>
-                <label className="team-search"><span className="sr-only">Search people</span><Search size={17} aria-hidden="true" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search people" />{query ? <button type="button" onClick={() => setQuery("")} aria-label="Clear search"><X size={15} /></button> : null}</label>
-              </div>
-
-              <div className="member-list">
-                {visibleMembers.map((member) => (
-                  <MemberCard actorId={actor.id} key={member.id} member={member} teams={teams} />
-                ))}
-                {visibleMembers.length === 0 ? <div className="team-empty"><Search size={22} aria-hidden="true" /><strong>No matching people</strong><span>Try a name, email, role, or team.</span></div> : null}
-              </div>
-            </section>
+            <TeamDirectory actorId={actor.id} teams={teams} initialPage={initialMemberPage} onDirectoryChanged={refreshDirectory} />
 
             <aside className="team-actions-column" aria-label="Team administration actions">
-              <InviteMemberForm teams={teams} />
-              <CreateTeamForm />
+              <InviteMemberForm teams={teams} onDirectoryChanged={refreshDirectory} />
+              <CreateTeamForm onDirectoryChanged={refreshDirectory} />
               <section className="team-security-note">
                 <ShieldCheck size={18} aria-hidden="true" />
                 <div><strong>Senior Director only</strong><p>Every action is checked again on the server and enforced by database policies.</p></div>
@@ -108,7 +103,49 @@ function FieldError({ state, name }: { state: TeamActionState; name: string }) {
   return message ? <span className="field-error">{message}</span> : null;
 }
 
-function InviteMemberForm({ teams }: { teams: ManagedTeam[] }) {
+async function fetchMemberPage(query: string, cursor: ManagedMemberCursor | null, signal: AbortSignal) {
+  const params = new URLSearchParams({ q: query });
+  if (cursor) {
+    params.set("cursorName", cursor.name);
+    params.set("cursorId", cursor.id);
+  }
+  const response = await fetch(`/api/team/members?${params.toString()}`, { signal });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { error?: string } | null;
+    throw new Error(body?.error ?? "Unable to load the team directory.");
+  }
+  return response.json() as Promise<ManagedMemberPage>;
+}
+
+function TeamDirectory({ actorId, teams, initialPage, onDirectoryChanged }: { actorId: string; teams: ManagedTeam[]; initialPage: ManagedMemberPage; onDirectoryChanged: () => void }) {
+  const [query, setQuery] = useState("");
+  const directory = useInfiniteQuery({
+    queryKey: ["team-directory", query.trim()],
+    queryFn: ({ pageParam, signal }) => fetchMemberPage(query.trim(), pageParam, signal),
+    initialPageParam: null as ManagedMemberCursor | null,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    initialData: query.trim() ? undefined : { pages: [initialPage], pageParams: [null] },
+    staleTime: 30_000,
+  });
+  const members = directory.data?.pages.flatMap((page) => page.members) ?? [];
+  const total = directory.data?.pages[0]?.total ?? 0;
+
+  return <section className="panel team-directory">
+    <div className="panel-heading team-directory-heading">
+      <div><p className="eyebrow">Directory</p><h2>{total} {query.trim() ? "matching people" : "people"}</h2></div>
+      <label className="team-search"><span className="sr-only">Search people</span><Search size={17} aria-hidden="true" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search people" />{query ? <button type="button" onClick={() => setQuery("")} aria-label="Clear search"><X size={15} /></button> : null}</label>
+    </div>
+
+    <div className="member-list">
+      {members.map((member) => <MemberCard actorId={actorId} key={member.id} member={member} teams={teams} onDirectoryChanged={onDirectoryChanged} />)}
+      {directory.isError ? <p className="team-directory-error" role="alert">{directory.error.message}</p> : null}
+      {!directory.isError && !directory.isLoading && members.length === 0 ? <div className="team-empty"><Search size={22} aria-hidden="true" /><strong>No matching people</strong><span>Try a name, email, role, or team.</span></div> : null}
+      {directory.hasNextPage ? <button className="button button-quiet team-load-more" type="button" onClick={() => void directory.fetchNextPage()} disabled={directory.isFetchingNextPage}>{directory.isFetchingNextPage ? "Loading…" : "Load more people"}</button> : null}
+    </div>
+  </section>;
+}
+
+function InviteMemberForm({ teams, onDirectoryChanged }: { teams: ManagedTeam[]; onDirectoryChanged: () => void }) {
   const [state, action, pending] = useActionState(inviteMemberAction, INITIAL_ACTION_STATE);
   const [role, setRole] = useState<Role>("team_member");
   const formRef = useRef<HTMLFormElement>(null);
@@ -116,8 +153,9 @@ function InviteMemberForm({ teams }: { teams: ManagedTeam[] }) {
   useEffect(() => {
     if (state.status === "success") {
       formRef.current?.reset();
+      onDirectoryChanged();
     }
-  }, [state]);
+  }, [onDirectoryChanged, state]);
 
   return (
     <section className="panel admin-form-card">
@@ -141,13 +179,16 @@ function InviteMemberForm({ teams }: { teams: ManagedTeam[] }) {
   );
 }
 
-function CreateTeamForm() {
+function CreateTeamForm({ onDirectoryChanged }: { onDirectoryChanged: () => void }) {
   const [state, action, pending] = useActionState(createTeamAction, INITIAL_ACTION_STATE);
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
-    if (state.status === "success") formRef.current?.reset();
-  }, [state]);
+    if (state.status === "success") {
+      formRef.current?.reset();
+      onDirectoryChanged();
+    }
+  }, [onDirectoryChanged, state]);
 
   return (
     <section className="panel admin-form-card">
@@ -162,12 +203,16 @@ function CreateTeamForm() {
   );
 }
 
-function MemberCard({ actorId, member, teams }: { actorId: string; member: ManagedMember; teams: ManagedTeam[] }) {
+function MemberCard({ actorId, member, teams, onDirectoryChanged }: { actorId: string; member: ManagedMember; teams: ManagedTeam[]; onDirectoryChanged: () => void }) {
   const [role, setRole] = useState(member.role);
   const [showDeactivate, setShowDeactivate] = useState(false);
   const [updateState, updateAction, updatePending] = useActionState(updateMemberAction, INITIAL_ACTION_STATE);
   const [deactivateState, deactivateAction, deactivatePending] = useActionState(deactivateMemberAction, INITIAL_ACTION_STATE);
   const isCurrentActor = member.id === actorId;
+
+  useEffect(() => {
+    if (updateState.status === "success" || deactivateState.status === "success") onDirectoryChanged();
+  }, [deactivateState.status, onDirectoryChanged, updateState.status]);
 
   return (
     <article className={member.isActive ? "member-card" : "member-card member-card-inactive"}>

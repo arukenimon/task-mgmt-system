@@ -14,9 +14,11 @@ export default async function TeamPage() {
   const data = await loadTeamManagementData();
   return (
     <TeamManagement
-      actor={{ id: profile.id, name: profile.fullName, initials: profile.initials, role: profile.role }}
-      members={data.members}
+      actor={{ id: profile.id, name: profile.fullName, initials: profile.initials, role: profile.role, teamId: profile.teamId }}
       teams={data.teams}
+      initialMemberPage={data.initialMemberPage}
+      activeMemberCount={data.activeMemberCount}
+      inactiveMemberOpenTaskCount={data.inactiveMemberOpenTaskCount}
     />
   );
 }
