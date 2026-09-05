@@ -1,10 +1,11 @@
 begin;
 
-select plan(20);
+select plan(27);
 
 select ok((select relrowsecurity from pg_class where oid = 'public.tasks'::regclass), 'tasks has RLS enabled');
 select ok((select relrowsecurity from pg_class where oid = 'public.profiles'::regclass), 'profiles has RLS enabled');
 select ok((select relrowsecurity from pg_class where oid = 'public.teams'::regclass), 'teams has RLS enabled');
+select ok((select relrowsecurity from pg_class where oid = 'public.task_attachments'::regclass), 'task attachments has RLS enabled');
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '20000000-0000-0000-0000-000000000001', true);
@@ -21,6 +22,39 @@ select is((select count(*) from public.tasks), 3::bigint, 'North team member can
 
 select set_config('request.jwt.claim.sub', '20000000-0000-0000-0000-000000000006', true);
 select is((select count(*) from public.tasks), 2::bigint, 'South team member cannot read North Team tasks');
+
+select set_config('request.jwt.claim.sub', '20000000-0000-0000-0000-000000000001', true);
+insert into public.task_attachments (task_id, storage_path, file_name, mime_type, byte_size, uploaded_by)
+values (
+  '40000000-0000-0000-0000-000000000001',
+  '40000000-0000-0000-0000-000000000001/50000000-0000-0000-0000-000000000001.png',
+  'brief.png',
+  'image/png',
+  1024,
+  '20000000-0000-0000-0000-000000000001'
+);
+select is((select count(*) from public.task_attachments), 1::bigint, 'senior director can add an attachment');
+insert into storage.objects (bucket_id, name, owner_id, metadata)
+values (
+  'task-attachments',
+  '40000000-0000-0000-0000-000000000001/50000000-0000-0000-0000-000000000001.png',
+  '20000000-0000-0000-0000-000000000001',
+  '{"mimetype":"image/png","size":1024}'::jsonb
+);
+
+select set_config('request.jwt.claim.sub', '20000000-0000-0000-0000-000000000004', true);
+select is((select count(*) from public.task_attachments), 1::bigint, 'team member can read attachments for visible tasks');
+select is((select count(*) from storage.objects where bucket_id = 'task-attachments'), 1::bigint, 'team member can read image objects for visible tasks');
+
+select set_config('request.jwt.claim.sub', '20000000-0000-0000-0000-000000000006', true);
+select is((select count(*) from public.task_attachments), 0::bigint, 'other teams cannot read task attachments');
+select is((select count(*) from storage.objects where bucket_id = 'task-attachments'), 0::bigint, 'other teams cannot read image objects');
+select throws_ok(
+  $$insert into public.task_attachments (task_id, storage_path, file_name, mime_type, byte_size, uploaded_by) values ('40000000-0000-0000-0000-000000000001', '40000000-0000-0000-0000-000000000001/50000000-0000-0000-0000-000000000002.png', 'not-allowed.png', 'image/png', 1024, '20000000-0000-0000-0000-000000000006')$$,
+  '42501',
+  'new row violates row-level security policy for table "task_attachments"',
+  'team members cannot add task attachments'
+);
 
 select set_config('request.jwt.claim.sub', '20000000-0000-0000-0000-000000000001', true);
 insert into public.teams (name) values ('East Team');
