@@ -29,7 +29,7 @@ export function ProfileSettings({ profile }: ProfileSettingsProps) {
 
   return (
     <main className="workspace-shell">
-      <WorkspaceSidebar active="profile" showTeamManagement={profile.role === "senior_director"} />
+      <WorkspaceSidebar active="profile" showTeamManagement={profile.role === "senior_director"} teamName={profile.teamName} />
 
       <section className="workspace-main">
         <header className="workspace-header">
