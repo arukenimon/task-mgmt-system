@@ -19,7 +19,7 @@ flowchart LR
 
 | Layer | Responsibility |
 | --- | --- |
-| `app/` | Route-level views, the Supabase magic-link confirmation Route Handler, layouts, and the protected daily-digest Route Handler. |
+| `app/` | Route-level views, the Supabase invitation/recovery confirmation Route Handler, layouts, and the protected daily-digest Route Handler. |
 | `features/*/views` | Presentational React components and interaction state. |
 | `features/*/controllers` | Server Actions that authenticate, validate, authorise, and revalidate. |
 | `features/*/models` | Types, Zod schemas, filters, and business vocabulary. |
@@ -36,7 +36,7 @@ flowchart LR
 - Only Senior Directors can open Team management, create teams, invite accounts, change roles or team assignments, and deactivate access. Every Server Action authenticates and authorises again; RLS separately restricts team and profile mutations.
 - RLS backs every browser-accessible table. The email worker uses the Supabase service role only on the Vercel server to process non-user outbox rows; it must never be exposed to the client.
 - Team invitations and Auth deactivation use the same server-only admin client. Deactivation sets `profiles.is_active = false` first so database access stops immediately, then bans future Supabase Auth sign-ins; profile and task history remain intact.
-- Auth is invite-only: the login action requests a magic link with `shouldCreateUser: false`, the template links to `/auth/confirm`, and that Route Handler exchanges the one-time token hash for the cookie session. Roles are read from `profiles`, never editable Auth user metadata.
+- Auth is invite-only and password-based: a Senior Director sends a Supabase invitation, the recipient verifies its one-time email link and chooses a password, then all workspace sessions must have Supabase's `password` AMR method. Invitation and password-recovery sessions can only reach the password-setup screen. Roles are read from `profiles`, never editable Auth user metadata.
 
 ## Product rules
 

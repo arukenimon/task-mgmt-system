@@ -2,7 +2,7 @@ import { z } from "zod";
 import { TASK_PRIORITIES, TASK_STATUSES } from "@/features/tasks/models/task";
 import type { KanbanTaskPageRequest } from "@/features/tasks/models/kanban";
 
-const identifier = z.union([z.literal("all"), z.string().uuid()]);
+const identifier = z.union([z.literal("all"), z.guid()]);
 const dateKey = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
 const requestSchema = z.object({
@@ -15,7 +15,7 @@ const requestSchema = z.object({
   due: z.enum(["all", "overdue", "today", "week"]).default("all"),
   query: z.string().trim().max(160).default(""),
   cursorDueDate: dateKey.optional(),
-  cursorId: z.string().uuid().optional(),
+  cursorId: z.guid().optional(),
 }).refine((value) => Boolean(value.cursorDueDate) === Boolean(value.cursorId), {
   message: "A cursor must include both its due date and task id.",
 });

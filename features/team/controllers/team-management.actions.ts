@@ -6,12 +6,14 @@ import {
   createTeamSchema,
   deactivateMemberSchema,
   inviteMemberSchema,
+  renameTeamSchema,
   updateMemberSchema,
 } from "@/features/team/models/team-management.schemas";
 import {
   createTeam,
   deactivateTeamMember,
   inviteTeamMember,
+  renameTeam,
   updateTeamMember,
 } from "@/features/team/services/team-management.service";
 
@@ -54,6 +56,19 @@ export async function createTeamAction(_state: TeamActionState, formData: FormDa
     return { status: "success", message: `${parsed.data.name} is ready for members.` };
   } catch (error) {
     return actionFailure(error, "The team could not be created.");
+  }
+}
+
+export async function renameTeamAction(_state: TeamActionState, formData: FormData): Promise<TeamActionState> {
+  try {
+    await requireSeniorDirector();
+    const parsed = renameTeamSchema.safeParse({ teamId: formData.get("teamId"), name: formData.get("name") });
+    if (!parsed.success) return validationFailure(parsed.error);
+    await renameTeam(parsed.data);
+    revalidateWorkspace();
+    return { status: "success", message: "Team renamed." };
+  } catch (error) {
+    return actionFailure(error, "The team could not be renamed.");
   }
 }
 
@@ -104,4 +119,3 @@ export async function deactivateMemberAction(_state: TeamActionState, formData: 
     return actionFailure(error, "The member could not be deactivated.");
   }
 }
-

@@ -12,3 +12,12 @@ export function getSupabaseConfig() {
 
   return { url, key };
 }
+
+export function getSiteUrl() {
+  let url = process.env.NEXT_PUBLIC_SITE_URL
+    ?? process.env.NEXT_PUBLIC_VERCEL_URL
+    ?? "http://localhost:3000";
+
+  if (!url.startsWith("http://") && !url.startsWith("https://")) url = `https://${url}`;
+  return url.replace(/\/+$/, "");
+}

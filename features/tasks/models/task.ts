@@ -37,7 +37,7 @@ export type Person = {
   isActive: boolean;
 };
 
-export type Client = { id: string; name: string; accountLeadId: string | null };
+export type Client = { id: string; name: string; accountLeadId: string | null; isActive: boolean };
 
 export type Task = {
   id: string;
@@ -45,7 +45,7 @@ export type Task = {
   description: string;
   clientId: string;
   teamId: string;
-  ownerId: string;
+  assigneeIds: string[];
   createdById: string;
   status: TaskStatus;
   priority: TaskPriority;
@@ -141,13 +141,6 @@ export const demoPeople: Person[] = [
   },
 ];
 
-export const demoClients: Client[] = [
-  { id: "internal", name: "Internal operations", accountLeadId: "ad-north" },
-  { id: "atlas", name: "Atlas Automotive", accountLeadId: "ad-north" },
-  { id: "solstice", name: "Solstice Motors", accountLeadId: "ad-south" },
-  { id: "helix", name: "Helix Vehicle Group", accountLeadId: "ad-south" },
-];
-
 export const demoTasks: Task[] = [
   {
     id: "task-1",
@@ -155,7 +148,7 @@ export const demoTasks: Task[] = [
     description: "Consolidate channel forecasts and prepare the approval note.",
     clientId: "atlas",
     teamId: "north",
-    ownerId: "zoe",
+    assigneeIds: ["zoe"],
     createdById: "ad-north",
     status: "in_progress",
     priority: "urgent",
@@ -169,7 +162,7 @@ export const demoTasks: Task[] = [
     description: "Map the lead nurture sequence for the new showroom opening.",
     clientId: "atlas",
     teamId: "north",
-    ownerId: "liam",
+    assigneeIds: ["liam"],
     createdById: "ad-north",
     status: "todo",
     priority: "high",
@@ -183,7 +176,7 @@ export const demoTasks: Task[] = [
     description: "Reconcile the event feed before the client dashboard refresh.",
     clientId: "solstice",
     teamId: "south",
-    ownerId: "olivia",
+    assigneeIds: ["olivia"],
     createdById: "ad-south",
     status: "blocked",
     priority: "urgent",
@@ -197,7 +190,7 @@ export const demoTasks: Task[] = [
     description: "Review campaign performance and draft the account commentary.",
     clientId: "helix",
     teamId: "south",
-    ownerId: "noah",
+    assigneeIds: ["noah"],
     createdById: "ad-south",
     status: "in_progress",
     priority: "high",
@@ -211,7 +204,7 @@ export const demoTasks: Task[] = [
     description: "Add the revised GDPR wording and standard handover fields.",
     clientId: "internal",
     teamId: "north",
-    ownerId: "zoe",
+    assigneeIds: ["zoe"],
     createdById: "director-1",
     status: "todo",
     priority: "medium",
@@ -225,7 +218,7 @@ export const demoTasks: Task[] = [
     description: "Identify drop-off points and propose three experiments.",
     clientId: "solstice",
     teamId: "south",
-    ownerId: "olivia",
+    assigneeIds: ["olivia"],
     createdById: "ad-south",
     status: "complete",
     priority: "medium",
@@ -239,7 +232,7 @@ export const demoTasks: Task[] = [
     description: "Prepare headline outcomes and the next-quarter growth plan.",
     clientId: "helix",
     teamId: "south",
-    ownerId: "noah",
+    assigneeIds: ["noah"],
     createdById: "director-1",
     status: "complete",
     priority: "high",
@@ -253,7 +246,7 @@ export const demoTasks: Task[] = [
     description: "Confirm all required production assets ahead of launch.",
     clientId: "atlas",
     teamId: "north",
-    ownerId: "liam",
+    assigneeIds: ["liam"],
     createdById: "ad-north",
     status: "complete",
     priority: "low",
@@ -267,7 +260,7 @@ export const demoTasks: Task[] = [
     description: "Coordinate the delivery team priorities for next month.",
     clientId: "internal",
     teamId: "north",
-    ownerId: "zoe",
+    assigneeIds: ["zoe"],
     createdById: "director-1",
     status: "in_progress",
     priority: "medium",

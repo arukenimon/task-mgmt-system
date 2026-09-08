@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { Role } from "@/features/identity/models/roles";
+import { hasPasswordAuthentication } from "@/lib/supabase/authentication";
 import { createClient } from "@/lib/supabase/server";
 
 export type CurrentProfile = {
@@ -26,7 +27,7 @@ export async function getCurrentProfile(): Promise<CurrentProfile | null> {
   const { data: claimsData, error: claimsError } = await supabase.auth.getClaims();
   const userId = claimsData?.claims?.sub;
 
-  if (claimsError || typeof userId !== "string") return null;
+  if (claimsError || typeof userId !== "string" || !hasPasswordAuthentication(claimsData?.claims)) return null;
 
   const { data: profile, error } = await supabase
     .from("profiles")

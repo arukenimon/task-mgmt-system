@@ -7,8 +7,10 @@ import { sendEmail } from "@/features/notifications/services/email.service";
 type DigestTask = {
   title: string;
   due_date: string;
-  owner_id: string;
-  profiles: { email: string; full_name: string } | { email: string; full_name: string }[] | null;
+  task_assignees: Array<{
+    profile_id: string;
+    profiles: { email: string; full_name: string } | { email: string; full_name: string }[] | null;
+  }>;
 };
 type OutboxItem = { id: string; recipient: string; subject: string; html: string; attempts: number };
 
@@ -17,19 +19,21 @@ export async function queueDailyDigests() {
   const { date } = londonDateParts();
   const { data, error } = await admin
     .from("tasks")
-    .select("title,due_date,owner_id,profiles!tasks_owner_id_fkey(email,full_name)")
+    .select("title,due_date,task_assignees!inner(profile_id,profiles!task_assignees_profile_id_fkey(email,full_name))")
     .neq("status", "complete")
     .lte("due_date", date);
   if (error) throw new Error("Unable to prepare the daily digest.");
 
-  const byOwner = new Map<string, DigestTask[]>();
-  for (const task of (data ?? []) as unknown as DigestTask[]) byOwner.set(task.owner_id, [...(byOwner.get(task.owner_id) ?? []), task]);
-  const rows = [...byOwner.entries()].flatMap(([ownerId, tasks]) => {
-    const profile = tasks[0]?.profiles;
-    const owner = Array.isArray(profile) ? profile[0] : profile;
-    if (!owner) return [];
-    const lines = tasks.map((task) => `<li><strong>${task.title}</strong> — due ${task.due_date}</li>`).join("");
-    return [{ dedupe_key: `daily-digest:${ownerId}:${date}`, recipient: owner.email, subject: `Bespoke: ${tasks.length} deadline reminder${tasks.length === 1 ? "" : "s"}`, html: `<h1>Today’s task reminder</h1><p>Hello ${owner.full_name},</p><ul>${lines}</ul>` }];
+  const byOwner = new Map<string, { profile: { email: string; full_name: string }; tasks: DigestTask[] }>();
+  for (const task of (data ?? []) as unknown as DigestTask[]) {
+    for (const assignee of task.task_assignees) {
+      const profile = Array.isArray(assignee.profiles) ? assignee.profiles[0] : assignee.profiles;
+      if (profile) byOwner.set(assignee.profile_id, { profile, tasks: [...(byOwner.get(assignee.profile_id)?.tasks ?? []), task] });
+    }
+  }
+  const rows = [...byOwner.entries()].flatMap(([ownerId, entry]) => {
+    const lines = entry.tasks.map((task) => `<li><strong>${task.title}</strong> — due ${task.due_date}</li>`).join("");
+    return [{ dedupe_key: `daily-digest:${ownerId}:${date}`, recipient: entry.profile.email, subject: `Bespoke: ${entry.tasks.length} deadline reminder${entry.tasks.length === 1 ? "" : "s"}`, html: `<h1>Today’s task reminder</h1><p>Hello ${entry.profile.full_name},</p><ul>${lines}</ul>` }];
   });
   if (!rows.length) return 0;
   const { error: insertError } = await admin.from("email_outbox").upsert(rows, { onConflict: "dedupe_key", ignoreDuplicates: true });

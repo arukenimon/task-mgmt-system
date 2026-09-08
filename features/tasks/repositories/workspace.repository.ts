@@ -34,14 +34,14 @@ export async function loadWorkspaceForCurrentUser(options: WorkspaceLoadOptions 
   const supabase = await createClient();
   const [peopleResult, clientsResult, teamsResult] = await Promise.all([
     supabase.from("profiles").select("id,full_name,email,initials,role,team_id,is_active").order("full_name"),
-    supabase.from("clients").select("id,name,account_lead_id").order("name"),
+    supabase.from("clients").select("id,name,account_lead_id,is_active").order("name"),
     supabase.from("teams").select("id,name").order("name"),
   ]);
 
   if (peopleResult.error || clientsResult.error || teamsResult.error) throw new Error("Unable to load workspace data.");
 
   const kanbanPages = options.kanbanFilters ? await loadInitialKanbanPages(options.kanbanFilters) : undefined;
-  const tasksResult = kanbanPages ? null : await supabase.from("tasks").select("id,title,description,client_id,team_id,owner_id,created_by_id,status,priority,due_date,completed_at,created_at").order("due_date");
+  const tasksResult = kanbanPages ? null : await supabase.from("tasks").select("id,title,description,client_id,team_id,created_by_id,status,priority,due_date,completed_at,created_at,task_assignees(profile_id)").order("due_date");
   if (tasksResult?.error) throw new Error("Unable to load workspace data.");
 
   const tasks: Task[] = kanbanPages ? Object.values(kanbanPages).flatMap((page) => page.tasks) : (tasksResult?.data ?? []).map((task) => {
@@ -52,7 +52,7 @@ export async function loadWorkspaceForCurrentUser(options: WorkspaceLoadOptions 
       description: task.description,
       clientId: task.client_id,
       teamId: task.team_id,
-      ownerId: task.owner_id,
+      assigneeIds: (task.task_assignees ?? []).map((assignee) => assignee.profile_id),
       createdById: task.created_by_id,
       status: task.status as Task["status"],
       priority: task.priority as Task["priority"],
@@ -70,7 +70,7 @@ export async function loadWorkspaceForCurrentUser(options: WorkspaceLoadOptions 
     teamId: person.team_id,
     isActive: person.is_active,
   }));
-  const clients: Client[] = (clientsResult.data ?? []).map((client) => ({ id: client.id, name: client.name, accountLeadId: client.account_lead_id }));
+  const clients: Client[] = (clientsResult.data ?? []).map((client) => ({ id: client.id, name: client.name, accountLeadId: client.account_lead_id, isActive: client.is_active }));
   const teams: Team[] = (teamsResult.data ?? []).map((team, index) => ({ id: team.id, name: team.name, accent: index % 2 ? "violet" : "teal" }));
   return { actorId: profile.id, tasks, people, clients, teams, kanbanPages };
 }
