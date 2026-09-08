@@ -3,6 +3,8 @@ import type { Role } from "@/features/identity/models/roles";
 export type ManagedTeam = {
   id: string;
   name: string;
+  memberCount: number;
+  activeMemberCount: number;
 };
 
 export type ManagedMember = {

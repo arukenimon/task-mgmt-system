@@ -1,10 +1,14 @@
 import { z } from "zod";
 
 const roleSchema = z.enum(["senior_director", "account_director", "team_member"]);
+// PostgreSQL accepts UUID-shaped identifiers without enforcing an RFC version or
+// variant. Keep validation aligned with the database so seeded and imported IDs
+// can be submitted back through the management forms.
+const databaseIdSchema = z.guid();
 
 const teamIdSchema = z.preprocess(
   (value) => typeof value === "string" && value.length > 0 ? value : null,
-  z.string().uuid().nullable(),
+  databaseIdSchema.nullable(),
 );
 
 function requireTeamForNonDirector(
@@ -24,6 +28,11 @@ export const createTeamSchema = z.object({
   name: z.string().trim().min(2, "Enter at least 2 characters.").max(80, "Keep the team name under 80 characters."),
 });
 
+export const renameTeamSchema = z.object({
+  teamId: databaseIdSchema,
+  name: z.string().trim().min(2, "Enter at least 2 characters.").max(80, "Keep the team name under 80 characters."),
+});
+
 export const inviteMemberSchema = z.object({
   fullName: z.string().trim().min(2, "Enter the member's full name.").max(100, "Keep the name under 100 characters."),
   email: z.string().trim().toLowerCase().email("Enter a valid work email."),
@@ -32,17 +41,17 @@ export const inviteMemberSchema = z.object({
 }).superRefine(requireTeamForNonDirector);
 
 export const updateMemberSchema = z.object({
-  memberId: z.string().uuid(),
+  memberId: databaseIdSchema,
   role: roleSchema,
   teamId: teamIdSchema,
 }).superRefine(requireTeamForNonDirector);
 
 export const deactivateMemberSchema = z.object({
-  memberId: z.string().uuid(),
+  memberId: databaseIdSchema,
 });
 
 export type CreateTeamInput = z.infer<typeof createTeamSchema>;
+export type RenameTeamInput = z.infer<typeof renameTeamSchema>;
 export type InviteMemberInput = z.infer<typeof inviteMemberSchema>;
 export type UpdateMemberInput = z.infer<typeof updateMemberSchema>;
 export type DeactivateMemberInput = z.infer<typeof deactivateMemberSchema>;
-

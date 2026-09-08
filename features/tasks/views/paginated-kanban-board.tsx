@@ -1,10 +1,11 @@
 "use client";
 
 import { QueryClient, QueryClientProvider, useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowUpRight, CalendarDays } from "lucide-react";
 import { useEffect, useState } from "react";
 import { TASK_PRIORITY_LABELS, TASK_STATUS_LABELS, TASK_STATUSES, type Client, type Person, type Task, type TaskStatus } from "@/features/tasks/models/task";
 import type { InitialKanbanPages, KanbanCursor, KanbanTaskPage } from "@/features/tasks/models/kanban";
-import type { TaskFilters } from "@/features/tasks/models/task-filters";
+import { todayKey, type TaskFilters } from "@/features/tasks/models/task-filters";
 
 type PaginatedKanbanBoardProps = {
   clients: Client[];
@@ -29,12 +30,29 @@ function clientFor(task: Task, clients: Client[]) {
   return clients.find((client) => client.id === task.clientId);
 }
 
-function ownerFor(task: Task, people: Person[]) {
-  return people.find((person) => person.id === task.ownerId);
+function assigneesFor(task: Task, people: Person[]) {
+  return people.filter((person) => task.assigneeIds.includes(person.id));
 }
 
 function PriorityDot({ priority }: { priority: Task["priority"] }) {
   return <span className={`priority priority-${priority}`}>{TASK_PRIORITY_LABELS[priority]}</span>;
+}
+
+function formatDueDate(date: string) {
+  return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short" }).format(new Date(`${date}T12:00:00`));
+}
+
+function dueState(task: Task) {
+  if (task.status !== "complete" && task.dueDate < todayKey()) return "overdue";
+  if (task.status !== "complete" && task.dueDate === todayKey()) return "today";
+  return "upcoming";
+}
+
+function dueLabel(task: Task) {
+  const state = dueState(task);
+  if (state === "overdue") return `Overdue · ${formatDueDate(task.dueDate)}`;
+  if (state === "today") return "Due today";
+  return `Due ${formatDueDate(task.dueDate)}`;
 }
 
 async function fetchKanbanPage(status: TaskStatus, filters: TaskFilters, cursor: KanbanCursor | null, signal: AbortSignal) {
@@ -103,11 +121,13 @@ function KanbanColumn({ status, clients, people, filters, initialPage, draggedTa
     <div className="column-heading"><span><i className={`status-dot status-${status}`} />{TASK_STATUS_LABELS[status]}</span><small>{total}</small></div>
     <div className="board-cards">
       {tasks.map((task) => {
-        const owner = ownerFor(task, people);
-        return <article className="board-card" key={task.id} draggable onDragStart={() => onDragStart(task)}>
-          <button className="board-card-title" type="button" onClick={() => onSelectTask(task)}>{task.title}</button>
+        const assignees = assigneesFor(task, people);
+        const taskDueState = dueState(task);
+        return <article aria-label={`View task details for ${task.title}`} className="board-card" draggable key={task.id} onClick={() => onSelectTask(task)} onDragStart={() => onDragStart(task)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelectTask(task); } }} role="button" tabIndex={0}>
+          <span className="board-card-title"><span>{task.title}</span><ArrowUpRight size={15} aria-hidden="true" /></span>
           <span className="client-label">{clientFor(task, clients)?.name}</span>
-          <div className="board-card-footer"><PriorityDot priority={task.priority} /><span className="avatar">{owner?.initials}</span></div>
+          <span className={`board-card-due board-card-due-${taskDueState}`}><CalendarDays size={14} aria-hidden="true" />{dueLabel(task)}</span>
+          <div className="board-card-footer"><PriorityDot priority={task.priority} /><span className="assignee-avatars" aria-label={`Assigned to ${assignees.map((person) => person.name).join(", ")}`}>{assignees.map((person) => <span className="avatar" key={person.id} title={person.name}>{person.initials}</span>)}</span></div>
         </article>;
       })}
       {query.isError ? <p className="board-load-error" role="alert">{query.error.message}</p> : null}

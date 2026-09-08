@@ -4,7 +4,7 @@ import type { ManagedMemberPageRequest } from "@/features/team/models/team-manag
 const requestSchema = z.object({
   query: z.string().trim().max(160).default(""),
   cursorName: z.string().min(1).max(160).optional(),
-  cursorId: z.string().uuid().optional(),
+  cursorId: z.guid().optional(),
 }).refine((value) => Boolean(value.cursorName) === Boolean(value.cursorId), {
   message: "A directory cursor must include both the member name and id.",
 });

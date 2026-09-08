@@ -5,11 +5,12 @@ import { KANBAN_PAGE_SIZE, type KanbanTaskPage, type KanbanTaskPageRequest } fro
 import { TASK_PRIORITIES, TASK_STATUSES, type Task } from "@/features/tasks/models/task";
 import { todayKey } from "@/features/tasks/models/task-filters";
 
-const taskFields = "id,title,description,client_id,team_id,owner_id,created_by_id,status,priority,due_date,completed_at,created_at";
+const taskFields = "id,title,description,client_id,team_id,created_by_id,status,priority,due_date,completed_at,created_at,task_assignees(profile_id)";
+const taskFieldsWithAssigneeFilter = `${taskFields},matching_assignees:task_assignees!inner(profile_id)`;
 
 function asTask(task: {
-  id: string; title: string; description: string; client_id: string; team_id: string; owner_id: string; created_by_id: string;
-  status: string; priority: string; due_date: string; completed_at: string | null; created_at: string;
+  id: string; title: string; description: string; client_id: string; team_id: string; created_by_id: string;
+  status: string; priority: string; due_date: string; completed_at: string | null; created_at: string; task_assignees: Array<{ profile_id: string }> | null;
 }): Task {
   if (!TASK_STATUSES.includes(task.status as Task["status"]) || !TASK_PRIORITIES.includes(task.priority as Task["priority"])) {
     throw new Error("Task contains invalid workflow data.");
@@ -21,7 +22,7 @@ function asTask(task: {
     description: task.description,
     clientId: task.client_id,
     teamId: task.team_id,
-    ownerId: task.owner_id,
+    assigneeIds: (task.task_assignees ?? []).map((assignee) => assignee.profile_id),
     createdById: task.created_by_id,
     status: task.status as Task["status"],
     priority: task.priority as Task["priority"],
@@ -39,11 +40,11 @@ export async function loadKanbanTaskPage({ status, filters, cursor = null }: Kan
   if (filters.status !== "all" && filters.status !== status) return { tasks: [], total: 0, nextCursor: null };
 
   const supabase = await createClient();
-  let query = supabase.from("tasks").select(taskFields, { count: "exact" }).eq("status", status);
+  let query = supabase.from("tasks").select(filters.ownerId === "all" ? taskFields : taskFieldsWithAssigneeFilter, { count: "exact" }).eq("status", status);
 
   if (filters.clientId !== "all") query = query.eq("client_id", filters.clientId);
   if (filters.teamId !== "all") query = query.eq("team_id", filters.teamId);
-  if (filters.ownerId !== "all") query = query.eq("owner_id", filters.ownerId);
+  if (filters.ownerId !== "all") query = query.eq("matching_assignees.profile_id", filters.ownerId);
   if (filters.priority !== "all") query = query.eq("priority", filters.priority);
 
   const today = todayKey();
@@ -66,8 +67,11 @@ export async function loadKanbanTaskPage({ status, filters, cursor = null }: Kan
   const { data, error, count } = await query.order("due_date", { ascending: true }).order("id", { ascending: true }).limit(KANBAN_PAGE_SIZE + 1);
   if (error) throw new Error("Unable to load Kanban tasks.");
 
-  const tasks = (data ?? []).slice(0, KANBAN_PAGE_SIZE).map(asTask);
-  const hasMore = (data?.length ?? 0) > KANBAN_PAGE_SIZE;
+  // Supabase's static query parser cannot infer a dynamically selected embedded
+  // relationship, although PostgREST accepts the alias used for filtering.
+  const taskRows = (data ?? []) as unknown as Array<Parameters<typeof asTask>[0]>;
+  const tasks = taskRows.slice(0, KANBAN_PAGE_SIZE).map(asTask);
+  const hasMore = taskRows.length > KANBAN_PAGE_SIZE;
   const lastTask = tasks.at(-1);
 
   return {
