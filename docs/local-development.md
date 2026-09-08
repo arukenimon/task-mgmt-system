@@ -15,7 +15,7 @@ npm run db:start
 npx supabase status -o env
 ```
 
-Copy `API_URL`, the publishable key, and `SERVICE_ROLE_KEY` from `supabase status` into `.env.local` as `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`. Keep the service-role key server-only; it is required for invitation and account-deactivation actions and must never use a `NEXT_PUBLIC_` prefix.
+Copy `API_URL`, the publishable key, and `SERVICE_ROLE_KEY` from `supabase status` into `.env.local` as `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`. Set `NEXT_PUBLIC_SITE_URL=http://localhost:3000` locally and to the canonical HTTPS application URL in production. Keep the service-role key server-only; it is required for invitation and account-deactivation actions and must never use a `NEXT_PUBLIC_` prefix.
 
 The local services use these default addresses:
 
@@ -26,11 +26,11 @@ The local services use these default addresses:
 
 Mailpit captures Supabase Auth emails and Bespoke’s SMTP email adapter. Set `EMAIL_PROVIDER=smtp` locally; use `EMAIL_PROVIDER=resend` and Vercel environment variables in production.
 
-## Passwordless local sign-in
+## Password-based local sign-in
 
-The app intentionally has no unauthenticated demo route. Visit `http://localhost:3000`, enter one of the seeded work emails, and open the one-time sign-in link in Mailpit. The template is versioned at `supabase/templates/magic-link.html` and is configured through `supabase/config.toml`. Local Supabase must keep its email provider enabled; application login remains invite-only because it requests links with `shouldCreateUser: false` and unprofiled users cannot read any workspace data.
+The app intentionally has no unauthenticated demo route. Visit `http://localhost:3000`, enter a seeded work email and its password, then sign in. All seeded accounts use `DemoPass!2026`. The application remains invite-only: a Senior Director creates the user through the Team screen, and the recipient receives an email invitation to confirm their address and choose a password. Workspace routes accept only sessions that were authenticated with a password.
 
-For a hosted Supabase project, copy that HTML and the subject `Your Bespoke sign-in link` into **Authentication → Email Templates → Magic Link**. Keep the link target exactly as shown: it must send `token_hash` to your deployed `/auth/confirm` route. Ensure the production Site URL and its `/auth/confirm` route are included in the project’s Auth URL configuration, then configure a production SMTP provider—Mailpit is local-only.
+For a hosted Supabase project, configure **Authentication → URL Configuration** with the deployed Site URL (for example `https://plane.forgekeep.online`). In **Authentication → Email Templates**, copy `supabase/templates/invite.html` into **Invite user** and `supabase/templates/recovery.html` into **Reset password**. Both links must send `token_hash` and the correct `type` to the deployed `/auth/confirm` route. Configure the password policy to require 12 characters, upper- and lowercase letters, a number, and a symbol. Finally, configure a production SMTP provider—Supabase's default sender is restricted and rate-limited, while Mailpit is local-only.
 
 Senior Directors can use `/team` to create teams, send Supabase Auth invitations, change roles and team assignments, or deactivate access. Hosted deployments must set `SUPABASE_SERVICE_ROLE_KEY` in Vercel as a server-only environment variable before those Auth administration actions will work.
 
@@ -48,7 +48,7 @@ Never edit a migration that has been applied to a shared remote environment. Cre
 
 ## Seeded accounts
 
-The seeded accounts are invited identities. They can sign in via a magic link (and retain `DemoPass!2026` only for direct password-flow diagnostics):
+The seeded accounts use the password `DemoPass!2026`:
 
 - `alex.morgan@taskhub.demo` — Senior Director
 - `sophie.turner@taskhub.demo` — North Account Director

@@ -1,10 +1,14 @@
 import { canManageTeamWork, type Role } from "@/features/identity/models/roles";
-import { taskIdSchema, taskInputSchema, taskStatusSchema, type TaskInput } from "@/features/tasks/models/task.schemas";
+import { taskIdSchema, taskInputSchema, taskStatusSchema, taskUpdateInputSchema, type TaskInput, type TaskUpdateInput } from "@/features/tasks/models/task.schemas";
 import { MAX_TASK_ATTACHMENT_BYTES, MAX_TASK_ATTACHMENTS, TASK_ATTACHMENT_ACCEPTED_TYPES } from "@/features/tasks/models/task-attachment";
 import type { TaskStatus } from "@/features/tasks/models/task";
 
 export function validateTaskInput(input: unknown): TaskInput {
   return taskInputSchema.parse(input);
+}
+
+export function validateTaskUpdateInput(input: unknown): TaskUpdateInput {
+  return taskUpdateInputSchema.parse(input);
 }
 
 export function validateStatus(status: unknown): TaskStatus {
@@ -19,8 +23,8 @@ export function canAllocate(role: Role) {
   return canManageTeamWork(role);
 }
 
-export function canChangeStatus(role: Role, actorId: string, ownerId: string) {
-  return canManageTeamWork(role) || actorId === ownerId;
+export function canChangeStatus(role: Role, actorId: string, assigneeIds: string[]) {
+  return canManageTeamWork(role) || assigneeIds.includes(actorId);
 }
 
 export function validateTaskAttachments(value: FormDataEntryValue[]) {
