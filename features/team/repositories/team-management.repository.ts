@@ -5,6 +5,7 @@ import { TEAM_MEMBER_PAGE_SIZE, type ManagedMember, type ManagedMemberPage, type
 import type { InviteMemberInput, UpdateMemberInput } from "@/features/team/models/team-management.schemas";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { getSiteUrl } from "@/lib/supabase/env";
 
 function assertRole(value: string): Role {
   if (value === "senior_director" || value === "account_director" || value === "team_member") return value;
@@ -56,12 +57,12 @@ export async function loadManagedMemberPage({ query: searchQuery, cursor = null 
   const pageProfiles = (data ?? []).slice(0, TEAM_MEMBER_PAGE_SIZE);
   const ownerIds = pageProfiles.map((profile) => profile.id);
   const { data: openTasks, error: openTasksError } = ownerIds.length
-    ? await supabase.from("tasks").select("owner_id").in("owner_id", ownerIds).neq("status", "complete")
+    ? await supabase.from("task_assignees").select("profile_id,tasks!inner(status)").in("profile_id", ownerIds).neq("tasks.status", "complete")
     : { data: [], error: null };
   if (openTasksError) throw new Error("Unable to load team workloads.");
 
   const openTasksByOwner = new Map<string, number>();
-  for (const task of openTasks ?? []) openTasksByOwner.set(task.owner_id, (openTasksByOwner.get(task.owner_id) ?? 0) + 1);
+  for (const task of openTasks ?? []) openTasksByOwner.set(task.profile_id, (openTasksByOwner.get(task.profile_id) ?? 0) + 1);
   const members = pageProfiles.map((profile) => asManagedMember(profile, openTasksByOwner.get(profile.id) ?? 0));
   const lastMember = members.at(-1);
 
@@ -74,19 +75,32 @@ export async function loadManagedMemberPage({ query: searchQuery, cursor = null 
 
 export async function loadTeamManagementData(): Promise<TeamManagementData> {
   const supabase = await createClient();
-  const [teamsResult, activeMembersResult, inactiveWorkResult, initialMemberPage] = await Promise.all([
+  const [teamsResult, teamMembersResult, activeMembersResult, inactiveWorkResult, initialMemberPage] = await Promise.all([
     supabase.from("teams").select("id,name").order("name"),
+    supabase.from("profiles").select("team_id,is_active").not("team_id", "is", null),
     supabase.from("profiles").select("id", { count: "exact", head: true }).eq("is_active", true),
-    supabase.from("tasks").select("id,profiles!tasks_owner_id_fkey!inner(is_active)", { count: "exact", head: true }).eq("profiles.is_active", false).neq("status", "complete"),
+    supabase.from("task_assignees").select("task_id,profiles!task_assignees_profile_id_fkey!inner(is_active),tasks!inner(status)", { count: "exact", head: true }).eq("profiles.is_active", false).neq("tasks.status", "complete"),
     loadManagedMemberPage({ query: "" }),
   ]);
 
-  if (teamsResult.error || activeMembersResult.error || inactiveWorkResult.error) {
+  if (teamsResult.error || teamMembersResult.error || activeMembersResult.error || inactiveWorkResult.error) {
     throw new Error("Unable to load team management data.");
   }
 
+  const memberCounts = new Map<string, { total: number; active: number }>();
+  for (const member of teamMembersResult.data ?? []) {
+    if (!member.team_id) continue;
+    const count = memberCounts.get(member.team_id) ?? { total: 0, active: 0 };
+    count.total += 1;
+    if (member.is_active) count.active += 1;
+    memberCounts.set(member.team_id, count);
+  }
+
   return {
-    teams: (teamsResult.data ?? []).map((team) => ({ id: team.id, name: team.name })),
+    teams: (teamsResult.data ?? []).map((team) => {
+      const count = memberCounts.get(team.id) ?? { total: 0, active: 0 };
+      return { id: team.id, name: team.name, memberCount: count.total, activeMemberCount: count.active };
+    }),
     initialMemberPage,
     activeMemberCount: activeMembersResult.count ?? 0,
     inactiveMemberOpenTaskCount: inactiveWorkResult.count ?? 0,
@@ -101,9 +115,19 @@ export async function insertTeam(name: string) {
   return data;
 }
 
+export async function updateTeamName(teamId: string, name: string) {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("teams").update({ name }).eq("id", teamId).select("id,name").single();
+  if (error?.code === "23505") throw new Error("A team with that name already exists.");
+  if (error || !data) throw new Error("The team could not be renamed.");
+  return data;
+}
+
 export async function inviteMember(input: InviteMemberInput, initials: string) {
   const admin = createAdminClient();
-  const { data, error } = await admin.auth.admin.inviteUserByEmail(input.email);
+  const { data, error } = await admin.auth.admin.inviteUserByEmail(input.email, {
+    redirectTo: `${getSiteUrl()}/auth/confirm?reason=invite`,
+  });
 
   if (error?.message.toLowerCase().includes("already")) {
     throw new Error("An account with that email already exists.");
@@ -146,10 +170,10 @@ export async function getManagedMember(memberId: string) {
 export async function countOpenTasksForMember(memberId: string) {
   const supabase = await createClient();
   const { count, error } = await supabase
-    .from("tasks")
-    .select("id", { count: "exact", head: true })
-    .eq("owner_id", memberId)
-    .neq("status", "complete");
+    .from("task_assignees")
+    .select("task_id,tasks!inner(status)", { count: "exact", head: true })
+    .eq("profile_id", memberId)
+    .neq("tasks.status", "complete");
   if (error) throw new Error("The member's current workload could not be checked.");
   return count ?? 0;
 }

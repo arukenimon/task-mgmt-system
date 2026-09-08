@@ -11,7 +11,7 @@ import {
   X,
 } from "lucide-react";
 import { QueryClient, QueryClientProvider, useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
-import { useActionState, useCallback, useEffect, useRef, useState } from "react";
+import { useActionState, useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ROLE_LABELS, type Role } from "@/features/identity/models/roles";
 import { AccountMenu } from "@/features/identity/views/account-menu";
@@ -20,6 +20,7 @@ import {
   createTeamAction,
   deactivateMemberAction,
   inviteMemberAction,
+  renameTeamAction,
   updateMemberAction,
   type TeamActionState,
 } from "@/features/team/controllers/team-management.actions";
@@ -76,7 +77,7 @@ function TeamManagementContent({ actor, teams, initialMemberPage, activeMemberCo
 
             <aside className="team-actions-column" aria-label="Team administration actions">
               <InviteMemberForm teams={teams} onDirectoryChanged={refreshDirectory} />
-              <CreateTeamForm onDirectoryChanged={refreshDirectory} />
+              <TeamStructure teams={teams} onTeamsChanged={refreshDirectory} />
               <section className="team-security-note">
                 <ShieldCheck size={18} aria-hidden="true" />
                 <div><strong>Senior Director only</strong><p>Every action is checked again on the server and enforced by database policies.</p></div>
@@ -146,29 +147,35 @@ function TeamDirectory({ actorId, teams, initialPage, onDirectoryChanged }: { ac
 }
 
 function InviteMemberForm({ teams, onDirectoryChanged }: { teams: ManagedTeam[]; onDirectoryChanged: () => void }) {
-  const [state, action, pending] = useActionState(inviteMemberAction, INITIAL_ACTION_STATE);
+  const [state, setState] = useState<TeamActionState>(INITIAL_ACTION_STATE);
+  const [pending, startTransition] = useTransition();
   const [role, setRole] = useState<Role>("team_member");
   const formRef = useRef<HTMLFormElement>(null);
 
-  useEffect(() => {
-    if (state.status === "success") {
-      formRef.current?.reset();
-      onDirectoryChanged();
-    }
-  }, [onDirectoryChanged, state]);
+  function submitInvite(formData: FormData) {
+    startTransition(async () => {
+      const nextState = await inviteMemberAction(state, formData);
+      setState(nextState);
+      if (nextState.status === "success") {
+        formRef.current?.reset();
+        setRole("team_member");
+        onDirectoryChanged();
+      }
+    });
+  }
 
   return (
     <section className="panel admin-form-card">
       <div className="admin-form-heading"><span><UserPlus size={19} /></span><div><p className="eyebrow">Access</p><h2>Invite a member</h2></div></div>
       <p className="admin-form-copy">They’ll receive a secure Supabase invitation by email.</p>
-      <form action={action} ref={formRef}>
+      <form action={submitInvite} ref={formRef}>
         <label>Full name<input aria-describedby="invite-name-error" autoComplete="name" name="fullName" placeholder="Jane Smith" required /></label>
         <span id="invite-name-error"><FieldError name="fullName" state={state} /></span>
         <label>Work email<input aria-describedby="invite-email-error" autoComplete="email" name="email" placeholder="jane@agency.co.uk" required type="email" /></label>
         <span id="invite-email-error"><FieldError name="email" state={state} /></span>
         <div className="form-grid">
           <label>Role<select name="role" value={role} onChange={(event) => setRole(event.target.value as Role)}>{EDITABLE_ROLES.map((item) => <option key={item} value={item}>{ROLE_LABELS[item]}</option>)}</select></label>
-          <label>Team<select aria-describedby="invite-team-error" disabled={role === "senior_director"} name="teamId" required={role !== "senior_director"} defaultValue={teams[0]?.id ?? ""}><option disabled value="">Choose a team</option>{teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}</select></label>
+          <label>Team<select aria-describedby="invite-team-error" name="teamId" required={role !== "senior_director"} defaultValue={teams[0]?.id ?? ""}><option disabled value="">Choose a team</option>{teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}</select></label>
         </div>
         <span id="invite-team-error"><FieldError name="teamId" state={state} /></span>
         <button className="button button-primary admin-submit" disabled={pending || (role !== "senior_director" && teams.length === 0)} type="submit"><UserPlus size={16} aria-hidden="true" />{pending ? "Sending invite…" : "Send invitation"}</button>
@@ -179,27 +186,71 @@ function InviteMemberForm({ teams, onDirectoryChanged }: { teams: ManagedTeam[];
   );
 }
 
-function CreateTeamForm({ onDirectoryChanged }: { onDirectoryChanged: () => void }) {
+function TeamStructure({ teams, onTeamsChanged }: { teams: ManagedTeam[]; onTeamsChanged: () => void }) {
+  return (
+    <section className="panel admin-form-card team-structure-card">
+      <div className="admin-form-heading"><span><Building2 size={19} /></span><div><p className="eyebrow">Structure</p><h2>Teams</h2></div></div>
+      <p className="admin-form-copy">Create teams and keep their names current. Member totals include deactivated members so team history stays clear.</p>
+      <div className="team-structure-section">
+        <div className="team-structure-section-heading"><h3>Add a team</h3></div>
+        <CreateTeamForm onTeamsChanged={onTeamsChanged} />
+      </div>
+      <div className="team-structure-divider" />
+      <div className="team-structure-section">
+        <div className="team-structure-section-heading">
+          <h3>Existing teams</h3>
+          <span className="team-count">{teams.length}</span>
+        </div>
+        <div className="existing-team-list">
+          {teams.map((team) => <ExistingTeam key={team.id} team={team} onTeamsChanged={onTeamsChanged} />)}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function CreateTeamForm({ onTeamsChanged }: { onTeamsChanged: () => void }) {
   const [state, action, pending] = useActionState(createTeamAction, INITIAL_ACTION_STATE);
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     if (state.status === "success") {
       formRef.current?.reset();
-      onDirectoryChanged();
+      onTeamsChanged();
     }
-  }, [onDirectoryChanged, state]);
+  }, [onTeamsChanged, state]);
 
   return (
-    <section className="panel admin-form-card">
-      <div className="admin-form-heading"><span><Building2 size={19} /></span><div><p className="eyebrow">Structure</p><h2>Create a team</h2></div></div>
-      <form action={action} ref={formRef}>
-        <label>Team name<input aria-describedby="team-name-error" name="name" placeholder="East Team" required /></label>
-        <span id="team-name-error"><FieldError name="name" state={state} /></span>
-        <button className="button button-quiet admin-submit" disabled={pending} type="submit"><Plus size={16} aria-hidden="true" />{pending ? "Creating…" : "Create team"}</button>
-        <ActionMessage state={state} />
-      </form>
-    </section>
+    <form action={action} className="team-create-form" ref={formRef}>
+      <label>Team name<input aria-describedby="team-name-error" name="name" placeholder="East Team" required /></label>
+      <button className="button button-quiet" disabled={pending} type="submit"><Plus size={16} aria-hidden="true" />{pending ? "Creating…" : "Create team"}</button>
+      <span id="team-name-error"><FieldError name="name" state={state} /></span>
+      <ActionMessage state={state} />
+    </form>
+  );
+}
+
+function ExistingTeam({ team, onTeamsChanged }: { team: ManagedTeam; onTeamsChanged: () => void }) {
+  const [state, action, pending] = useActionState(renameTeamAction, INITIAL_ACTION_STATE);
+
+  useEffect(() => {
+    if (state.status === "success") onTeamsChanged();
+  }, [onTeamsChanged, state.status]);
+
+  const memberLabel = `${team.memberCount} ${team.memberCount === 1 ? "member" : "members"}`;
+  const activeLabel = team.activeMemberCount === team.memberCount
+    ? "all active"
+    : `${team.activeMemberCount} active`;
+
+  return (
+    <form action={action} className="existing-team-row">
+      <input name="teamId" type="hidden" value={team.id} />
+      <label><span className="sr-only">Team name</span><input aria-describedby={`team-${team.id}-error`} defaultValue={team.name} name="name" required /></label>
+      <span className="existing-team-count">{memberLabel} · {activeLabel}</span>
+      <button className="button button-quiet" disabled={pending} type="submit">{pending ? "Saving…" : "Rename"}</button>
+      <span id={`team-${team.id}-error`}><FieldError name="name" state={state} /></span>
+      <ActionMessage state={state} />
+    </form>
   );
 }
 

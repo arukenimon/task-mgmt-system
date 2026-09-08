@@ -7,12 +7,14 @@ export const taskInputSchema = z.object({
   // The seeded assessment IDs use a version-0 segment, so `uuid()` rejects
   // legitimate foreign keys before the repository can persist the task.
   clientId: z.guid(),
-  ownerId: z.guid(),
+  assigneeIds: z.array(z.guid()).min(1, "Select at least one assignee.").max(50),
   priority: z.enum(["low", "medium", "high", "urgent"]),
   dueDate: z.iso.date(),
 });
 
 export const taskStatusSchema = z.enum(["todo", "in_progress", "blocked", "complete"]);
 export const taskIdSchema = z.guid();
+export const taskUpdateInputSchema = taskInputSchema.extend({ taskId: taskIdSchema });
 
 export type TaskInput = z.infer<typeof taskInputSchema>;
+export type TaskUpdateInput = z.infer<typeof taskUpdateInputSchema>;

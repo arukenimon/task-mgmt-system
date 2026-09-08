@@ -37,7 +37,7 @@ export function matchesTaskFilters(task: Task, filters: TaskFilters) {
 
   if (filters.clientId !== "all" && task.clientId !== filters.clientId) return false;
   if (filters.teamId !== "all" && task.teamId !== filters.teamId) return false;
-  if (filters.ownerId !== "all" && task.ownerId !== filters.ownerId) return false;
+  if (filters.ownerId !== "all" && !task.assigneeIds.includes(filters.ownerId)) return false;
   if (filters.status !== "all" && task.status !== filters.status) return false;
   if (filters.priority !== "all" && task.priority !== filters.priority) return false;
   if (query && !`${task.title} ${task.description}`.toLowerCase().includes(query)) return false;

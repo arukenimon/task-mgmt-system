@@ -26,8 +26,14 @@ Local Mailpit is available at `http://localhost:55424`. Request a sign-in link f
 npm run db:reset  # rebuild local Postgres and seed demo data
 npm run db:lint   # database linting
 npm run db:test   # pgTAP RLS tests
+npm run test:run  # Vitest unit and component tests (one pass)
+npm run test      # Vitest in watch mode while developing
+npm run test:coverage  # unit and component coverage report
+npm run verify    # lint, unit/component tests, and production build
 npm run build     # production build
 ```
+
+`npm run test:run` is the routine automated application check. It covers validation, role-sensitive business rules, task filtering, reporting, and navigation visibility. Database RLS coverage remains separate in `npm run db:test` because it requires the local Supabase stack.
 
 See [architecture documentation](docs/architecture.md) and [local-development documentation](docs/local-development.md) for the full design and setup guidance.
 # task-mgmt-system

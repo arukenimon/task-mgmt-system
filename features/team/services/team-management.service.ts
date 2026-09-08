@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { CreateTeamInput, DeactivateMemberInput, InviteMemberInput, UpdateMemberInput } from "@/features/team/models/team-management.schemas";
+import type { CreateTeamInput, DeactivateMemberInput, InviteMemberInput, RenameTeamInput, UpdateMemberInput } from "@/features/team/models/team-management.schemas";
 import {
   banMemberAuthUser,
   countOpenTasksForMember,
@@ -8,6 +8,7 @@ import {
   insertTeam,
   inviteMember,
   setMemberActive,
+  updateTeamName,
   updateMemberAssignment,
 } from "@/features/team/repositories/team-management.repository";
 
@@ -22,6 +23,10 @@ function initialsFor(fullName: string) {
 
 export async function createTeam(input: CreateTeamInput) {
   return insertTeam(input.name);
+}
+
+export async function renameTeam(input: RenameTeamInput) {
+  return updateTeamName(input.teamId, input.name);
 }
 
 export async function inviteTeamMember(input: InviteMemberInput) {
@@ -58,4 +63,3 @@ export async function deactivateTeamMember(actorId: string, input: DeactivateMem
     throw error;
   }
 }
-
