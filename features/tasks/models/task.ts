@@ -58,7 +58,7 @@ export type TaskActivity = {
   id: string;
   taskId: string;
   actorId: string;
-  type: "created" | "assigned" | "status_changed" | "completed";
+  type: "created" | "assigned" | "unassigned" | "updated" | "status_changed" | "completed";
   summary: string;
   createdAt: string;
 };

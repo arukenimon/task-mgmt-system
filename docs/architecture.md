@@ -12,6 +12,7 @@ flowchart LR
   Repository --> RLS[(Supabase Auth + RLS)]
   RLS --> DB[(Postgres)]
   DB --> Outbox[Email outbox]
+  Actions[Task Server Actions] --> Outbox
   Cron[Vercel Cron] --> Outbox
 ```
 
@@ -31,7 +32,7 @@ flowchart LR
 
 - `teams` → `profiles` → `clients` → `tasks` are the core operational records.
 - `task_activity` is trigger-written for creation, reassignment, status changes, and completion.
-- `email_outbox` is trigger-written for allocations; the cron worker adds idempotent daily deadline digests.
+- `email_outbox` is trigger-written for assignments and material task escalations. Successful task Server Actions claim and deliver a small batch after the response, while cron adds idempotent daily deadline digests and recovers pending deliveries.
 - Senior Directors read and manage everything; Account Directors manage only their team; team members read team work but may only change the status of their own work.
 - Only Senior Directors can open Team management, create teams, invite accounts, change roles or team assignments, and deactivate access. Every Server Action authenticates and authorises again; RLS separately restricts team and profile mutations.
 - RLS backs every browser-accessible table. The email worker uses the Supabase service role only on the Vercel server to process non-user outbox rows; it must never be exposed to the client.

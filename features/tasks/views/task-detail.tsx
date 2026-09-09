@@ -6,6 +6,7 @@ import { getTaskAttachmentsAction } from "@/features/tasks/controllers/task.acti
 import { TASK_PRIORITY_LABELS, TASK_STATUS_LABELS, TASK_STATUSES, type Client, type Person, type Task, type TaskStatus } from "@/features/tasks/models/task";
 import { todayKey } from "@/features/tasks/models/task-filters";
 import type { TaskAttachment } from "@/features/tasks/models/task-attachment";
+import { TaskActivityTimeline } from "@/features/tasks/views/task-activity-timeline";
 
 type TaskDetailProps = {
   task: Task;
@@ -76,7 +77,6 @@ function TaskAttachments({ taskId }: { taskId: string }) {
 }
 
 export function TaskDetail({ task, clients, people, onClose, onEdit, onStatusChange, canEdit, canUpdate }: TaskDetailProps) {
-  const assignees = assigneesFor(task, people);
   return (
     <aside className="detail-panel" aria-label="Task details">
       <div className="detail-heading">
@@ -96,11 +96,7 @@ export function TaskDetail({ task, clients, people, onClose, onEdit, onStatusCha
         <div><span>Priority</span><PriorityDot priority={task.priority} /></div>
       </div>
       <label className="status-control"><span>Status</span><select value={task.status} onChange={(event) => onStatusChange(task.id, event.target.value as TaskStatus)} disabled={!canUpdate}>{TASK_STATUSES.map((status) => <option key={status} value={status}>{TASK_STATUS_LABELS[status]}</option>)}</select></label>
-      <div className="activity">
-        <p className="eyebrow">Activity</p>
-        <div><i /><span><strong>{assignees.map((person) => person.name).join(", ")}</strong> are assigned to this task<small>Assignment recorded</small></span></div>
-        <div><i /><span>Deadline set for <strong>{fullDate(task.dueDate)}</strong><small>Task created</small></span></div>
-      </div>
+      <TaskActivityTimeline taskId={task.id} />
     </aside>
   );
 }

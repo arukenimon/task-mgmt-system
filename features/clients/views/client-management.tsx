@@ -40,7 +40,7 @@ export function ClientManagement({ actor, clients, accountLeads }: ClientManagem
       <section className="workspace-main">
         <header className="workspace-header">
           <p className="workspace-header-context"><span>Workspace</span><span aria-hidden="true">/</span><strong>Client management</strong></p>
-          <AccountMenu initials={actor.initials} name={actor.name} role={actor.role} />
+          <AccountMenu actorId={actor.id} initials={actor.initials} name={actor.name} role={actor.role} />
         </header>
         <WorkspaceMainLoading active="clients" />
 
