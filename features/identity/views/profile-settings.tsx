@@ -12,6 +12,7 @@ const INITIAL_STATE: ProfileActionState = { status: "idle", message: "" };
 
 type ProfileSettingsProps = {
   profile: {
+    id: string;
     fullName: string;
     email: string;
     initials: string;
@@ -35,7 +36,7 @@ export function ProfileSettings({ profile }: ProfileSettingsProps) {
       <section className="workspace-main">
         <header className="workspace-header">
           <p className="workspace-header-context"><span>Workspace</span><span aria-hidden="true">/</span><strong>Profile</strong></p>
-          <AccountMenu initials={profile.initials} name={profile.fullName} role={profile.role} />
+          <AccountMenu actorId={profile.id} initials={profile.initials} name={profile.fullName} role={profile.role} />
         </header>
         <WorkspaceMainLoading active="profile" />
 

@@ -13,6 +13,7 @@ export default async function ProfilePage() {
   return (
     <ProfileSettings
       profile={{
+        id: profile.id,
         fullName: profile.fullName,
         email: profile.email,
         initials: profile.initials,
