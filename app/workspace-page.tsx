@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { TaskWorkspace, type WorkspaceView } from "@/features/tasks/views/task-workspace";
-import { DEFAULT_FILTERS, type TaskFilters } from "@/features/tasks/models/task-filters";
+import { DEFAULT_FILTERS, resolveTaskFiltersForActor, type TaskFilters } from "@/features/tasks/models/task-filters";
 import { hasSupabaseConfig } from "@/lib/supabase/env";
 import { loadWorkspaceForCurrentUser } from "@/features/tasks/repositories/workspace.repository";
 
@@ -28,18 +28,22 @@ function filtersFromParams(params: WorkspaceSearchParams): TaskFilters {
 }
 
 function taskViewFromParams(params: WorkspaceSearchParams): Exclude<WorkspaceView, "overview"> | undefined {
-  const taskView = firstValue(params.taskView);
+  const taskView = firstValue(params.v) ?? firstValue(params.taskView);
   return taskView === "list" || taskView === "calendar" || taskView === "board" ? taskView : undefined;
 }
 
 export async function WorkspacePage({ searchParams, view }: WorkspacePageProps) {
   const params = await searchParams;
-  const filters = filtersFromParams(params);
+  const requestedFilters = filtersFromParams(params);
+  const hasExplicitOwnerFilter = firstValue(params.owner) !== undefined;
   const initialTaskView = taskViewFromParams(params);
 
   if (!hasSupabaseConfig) redirect("/login");
-  const workspace = await loadWorkspaceForCurrentUser(view === "board" ? { kanbanFilters: filters } : undefined);
+  const workspace = await loadWorkspaceForCurrentUser(view === "board" ? { kanbanFilters: requestedFilters, hasExplicitOwnerFilter } : undefined);
   if (!workspace) redirect("/login");
+  const actor = workspace.people.find((person) => person.id === workspace.actorId);
+  if (!actor) throw new Error("Your signed-in profile is not available in this workspace.");
+  const filters = resolveTaskFiltersForActor(requestedFilters, actor, hasExplicitOwnerFilter);
 
   return (
     <TaskWorkspace

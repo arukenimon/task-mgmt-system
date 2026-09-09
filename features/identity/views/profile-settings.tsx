@@ -5,6 +5,7 @@ import { useActionState } from "react";
 import { updateProfileAction, type ProfileActionState } from "@/features/identity/controllers/profile.actions";
 import { ROLE_LABELS, type Role } from "@/features/identity/models/roles";
 import { AccountMenu } from "@/features/identity/views/account-menu";
+import { WorkspaceMainLoading } from "@/features/navigation/views/workspace-main-loading";
 import { WorkspaceSidebar } from "@/features/navigation/views/workspace-sidebar";
 
 const INITIAL_STATE: ProfileActionState = { status: "idle", message: "" };
@@ -36,6 +37,7 @@ export function ProfileSettings({ profile }: ProfileSettingsProps) {
           <p className="workspace-header-context"><span>Workspace</span><span aria-hidden="true">/</span><strong>Profile</strong></p>
           <AccountMenu initials={profile.initials} name={profile.fullName} role={profile.role} />
         </header>
+        <WorkspaceMainLoading active="profile" />
 
         <div className="workspace-content profile-page-content">
           <header className="topbar profile-topbar">

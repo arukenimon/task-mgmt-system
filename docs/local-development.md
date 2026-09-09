@@ -19,10 +19,10 @@ Copy `API_URL`, the publishable key, and `SERVICE_ROLE_KEY` from `supabase statu
 
 The local services use these default addresses:
 
-- Studio: `http://localhost:55423`
-- Mailpit inbox: `http://localhost:55424`
-- Mailpit SMTP: `127.0.0.1:55425`
-- Supabase API: `http://127.0.0.1:55421`
+- Studio: `http://localhost:56423`
+- Mailpit inbox: `http://localhost:56424`
+- Mailpit SMTP: `127.0.0.1:56425`
+- Supabase API: `http://127.0.0.1:56421`
 
 Mailpit captures Supabase Auth emails and Bespoke’s SMTP email adapter. Set `EMAIL_PROVIDER=smtp` locally; use `EMAIL_PROVIDER=resend` and Vercel environment variables in production.
 
