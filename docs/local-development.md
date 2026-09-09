@@ -24,7 +24,7 @@ The local services use these default addresses:
 - Mailpit SMTP: `127.0.0.1:56425`
 - Supabase API: `http://127.0.0.1:56421`
 
-Mailpit captures Supabase Auth emails and Bespoke’s SMTP email adapter. Set `EMAIL_PROVIDER=smtp` locally; use `EMAIL_PROVIDER=resend` and Vercel environment variables in production.
+Mailpit captures Supabase Auth emails and Bespoke’s SMTP email adapter. Set `EMAIL_PROVIDER=smtp` locally; use `EMAIL_PROVIDER=brevo` with a server-only `BREVO_API_KEY` in Vercel for application notifications. Supabase Auth invitation and recovery mail still require production SMTP configured in Supabase.
 
 ## Password-based local sign-in
 

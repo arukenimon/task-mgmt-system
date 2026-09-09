@@ -12,7 +12,7 @@ Built with Next.js and Supabase, Bespoke combines a focused task workspace with 
 - Surface operational risk in the Overview: open work, overdue work, deadlines due soon, completion and on-time rates, workload by client, and workload by person.
 - Attach up to four task images (PNG, JPEG, or WebP; 5 MB each) to give assignments useful visual context.
 - Keep a task activity trail for creation, assignment, status changes, and completion.
-- Send assignment notifications and an idempotent weekday deadline digest through an outbox worker.
+- Send assignment and task-escalation notifications immediately after task writes, with an idempotent weekday deadline digest and cron recovery through the outbox worker.
 - Let Senior Directors maintain teams, invite and deactivate members, set roles, and manage active or archived clients.
 - Let every signed-in user maintain their own profile name and initials.
 
@@ -33,7 +33,9 @@ flowchart LR
   Manager[Senior Director or Account Director] -->|allocates task| Task[Task + assignees]
   Task --> Activity[Task activity trail]
   Task --> Outbox[Email outbox]
-  Outbox -->|weekday 09:00 Europe/London| Digest[Deadline digest]
+  Actions[Task Server Actions] -->|post-response delivery| Outbox
+  Cron[Vercel Cron] -->|weekday digest + recovery| Outbox
+  Outbox --> Mail[Transactional email]
   Task --> Workspace[List · Calendar · Kanban · Overview]
   Member[Assigned team member] -->|updates status| Task
   Director[Senior Director] -->|manages| Teams[Teams, members, clients]
@@ -51,6 +53,7 @@ flowchart LR
   Repository --> RLS[Supabase Auth + RLS]
   RLS --> Database[(PostgreSQL + Storage)]
   Database --> Outbox[Email outbox]
+  Actions[Task Server Actions] --> Outbox
   Cron[Vercel Cron] --> Outbox
 ```
 
@@ -67,7 +70,7 @@ flowchart LR
 
 ### Data and notification model
 
-The core relationship is `teams → profiles → clients → tasks`. A task has a primary owner for compatibility and a `task_assignees` join table for multi-person assignments. PostgreSQL triggers record task activity and enqueue assignment notifications. The protected cron endpoint creates deduplicated weekday deadline digests and flushes the outbox through SMTP locally or Resend in production.
+The core relationship is `teams → profiles → clients → tasks`. A task has a primary owner for compatibility and a `task_assignees` join table for multi-person assignments. PostgreSQL triggers record task activity and enqueue assignment and task-escalation notifications. Successful task Server Actions flush a leased outbox batch after the response; the protected cron endpoint creates deduplicated weekday deadline digests and remains the recovery worker. Delivery uses SMTP locally or Brevo in production.
 
 All browser-accessible tables and the private `task-attachments` storage bucket are protected by RLS. The Supabase service-role key is used only by server-side invitation, deactivation, and email-worker operations.
 
@@ -76,7 +79,7 @@ All browser-accessible tables and the private `task-attachments` storage bucket 
 - **Frontend:** Next.js 16 App Router, React 19, TypeScript, Tailwind CSS 4
 - **Data and identity:** Supabase Auth, PostgreSQL, Row Level Security, and Storage
 - **Validation and data UI:** Zod and TanStack Query
-- **Email:** Nodemailer + Mailpit for local development; Resend for production
+- **Email:** Nodemailer + Mailpit for local development; Brevo Transactional Email API for production
 - **Testing:** Vitest, Testing Library, and pgTAP RLS tests
 - **Deployment:** Vercel, including scheduled cron invocations
 
@@ -152,9 +155,9 @@ Begin with [`.env.example`](.env.example). The main variables are:
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Yes | Browser-safe Supabase publishable key |
 | `NEXT_PUBLIC_SITE_URL` | Yes | Canonical site URL used in authentication redirects |
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes for invitations, deactivation, and email worker | Server-only Supabase admin credential |
-| `EMAIL_PROVIDER` | Yes | `smtp` locally or `resend` in production |
+| `EMAIL_PROVIDER` | Yes | `smtp` locally or `brevo` in production |
 | `MAILPIT_HOST`, `MAILPIT_PORT`, `EMAIL_FROM` | Local SMTP | Local email-delivery configuration |
-| `RESEND_API_KEY` | Production email | Server-only Resend API key |
+| `BREVO_API_KEY` | Production email | Server-only Brevo Transactional Email API key |
 | `CRON_SECRET` | Production cron | Bearer token required by the daily-digest endpoint |
 
 ## Database workflow
@@ -186,7 +189,7 @@ The application suite covers task validation, assignment and status permissions,
 ## Deploy to Vercel
 
 1. Create a hosted Supabase project and apply the migrations in `supabase/migrations/`.
-2. Set every required production value from `.env.example` in Vercel, using `EMAIL_PROVIDER=resend` and server-only values for `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`, and `CRON_SECRET`.
+2. Set every required production value from `.env.example` in Vercel, using `EMAIL_PROVIDER=brevo` and server-only values for `SUPABASE_SERVICE_ROLE_KEY`, `BREVO_API_KEY`, and `CRON_SECRET`.
 3. In Supabase Auth, set the production Site URL and allowed redirect URLs. Copy the repository’s `supabase/templates/invite.html` and `supabase/templates/recovery.html` into the corresponding hosted email templates.
 4. Configure a production SMTP sender for Supabase Auth; Mailpit is local-only.
 5. Deploy. [`vercel.json`](vercel.json) invokes the digest endpoint at both 08:00 and 09:00 UTC on weekdays; the handler sends only during 09:00 Europe/London so the schedule stays correct across UK daylight-saving changes.
