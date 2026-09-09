@@ -3,6 +3,7 @@
 import { Archive, Building2, CircleCheckBig, Plus, Search, ShieldCheck, Users, X } from "lucide-react";
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { AccountMenu } from "@/features/identity/views/account-menu";
+import { WorkspaceMainLoading } from "@/features/navigation/views/workspace-main-loading";
 import { WorkspaceSidebar } from "@/features/navigation/views/workspace-sidebar";
 import {
   archiveClientAction,
@@ -41,6 +42,7 @@ export function ClientManagement({ actor, clients, accountLeads }: ClientManagem
           <p className="workspace-header-context"><span>Workspace</span><span aria-hidden="true">/</span><strong>Client management</strong></p>
           <AccountMenu initials={actor.initials} name={actor.name} role={actor.role} />
         </header>
+        <WorkspaceMainLoading active="clients" />
 
         <div className="workspace-content client-page-content">
           <header className="topbar team-topbar">

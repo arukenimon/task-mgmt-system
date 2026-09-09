@@ -11,7 +11,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 ## Task Hub engineering rules
 
 - Keep the feature-aligned MVC boundaries: views render, controllers authenticate and validate, services own use cases, and repositories own Supabase queries.
-- Use the WSL terminal and the project-local Supabase CLI for all Node, Docker, and database work. Do not mix Windows and Linux `node_modules`.
+- Use Windows PowerShell, Docker Desktop, and the project-local Supabase CLI for all Node, Docker, and database work. Keep dependencies Windows-native; do not use WSL `node_modules` in this checkout.
 - Create migrations with `npx supabase migration new <name>`; verify with `npm run db:reset`, `npm run db:lint`, and `npm run db:test` before applying a schema change remotely.
 - Enable and test RLS on every exposed table. Never use editable Supabase `user_metadata` for authorisation and never expose a service-role key to browser code.
 - Use Server Components for reads, Server Actions for internal UI mutations, and Route Handlers only for HTTP boundaries such as Vercel Cron.

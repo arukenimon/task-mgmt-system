@@ -351,6 +351,11 @@ p { margin: 0; }
   margin-bottom: 14px;
 }
 
+.task-view-controls {
+  position: relative;
+  z-index: 2;
+}
+
 .workspace-view-switcher {
   margin-bottom: 18px;
 }
@@ -363,6 +368,8 @@ p { margin: 0; }
 
 .workspace-header {
   display: flex;
+  position: relative;
+  z-index: 4;
   min-height: 64px;
   align-items: center;
   justify-content: space-between;
@@ -448,6 +455,34 @@ p { margin: 0; }
   max-width: 1580px;
   padding: 34px 48px 64px;
 }
+
+.workspace-main-loading {
+  position: fixed;
+  z-index: 3;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: var(--sidebar-width);
+  display: grid;
+  place-items: center;
+  background: var(--canvas);
+}
+
+@keyframes loader-spin {
+  to { transform: rotate(360deg); }
+}
+
+.centered-loader { display: grid; place-items: center; }
+.centered-loader-spinner { width: 32px; height: 32px; border: 3px solid #c7d8ff; border-right-color: var(--teal); border-radius: 50%; animation: loader-spin 720ms linear infinite; }
+
+.task-view-loading {
+  display: grid;
+  min-height: 290px;
+  place-items: center;
+}
+
+.task-dialog-loading { display: grid; min-height: 180px; place-items: center; }
+.task-detail-loading { display: grid; min-height: 340px; place-items: center; }
 
 .topbar {
   display: flex;
@@ -573,6 +608,70 @@ p { margin: 0; }
 .filter-bar select { width: 100%; min-width: 0; padding: 0 8px; }
 .filter-bar select:hover,
 .search-field:hover { background: #f5f8ff; }
+
+.task-filter-select { position: relative; min-width: 0; }
+.task-filter-select-trigger {
+  display: flex;
+  width: 100%;
+  height: 38px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 7px;
+  padding: 0 8px;
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: #42534d;
+  background: transparent;
+  font: inherit;
+  font-size: 0.75rem;
+  text-align: left;
+}
+.task-filter-select-trigger:hover,
+.task-filter-select-trigger[aria-expanded="true"] { background: #f5f8ff; }
+.task-filter-select-trigger:focus-visible { border-color: color-mix(in srgb, var(--teal) 52%, transparent); outline: 2px solid rgb(52 130 110 / 0.2); outline-offset: 1px; }
+.task-filter-select-trigger span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-filter-select-trigger svg { flex: 0 0 auto; }
+.task-filter-select-menu {
+  position: absolute;
+  z-index: 12;
+  top: calc(100% + 5px);
+  right: 0;
+  width: max(100%, min(240px, calc(100vw - 28px)));
+  overflow: hidden;
+  border: 1px solid #c9d7d1;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 14px 30px rgb(25 52 44 / 0.16);
+}
+.task-filter-select-search { display: flex; min-height: 40px; align-items: center; gap: 7px; padding: 0 10px; border-bottom: 1px solid #e7eee9; color: #71827b; }
+.task-filter-select-search input { width: 100%; min-width: 0; border: 0; outline: 0; color: var(--ink); background: transparent; font: inherit; font-size: 0.75rem; }
+.task-filter-select-search input::placeholder { color: #8a9a94; }
+.task-filter-select-options { max-height: 220px; overflow-y: auto; padding: 5px; }
+.task-filter-select-option {
+  display: block;
+  width: 100%;
+  min-height: 35px;
+  padding: 7px 8px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 6px;
+  color: #31443d;
+  background: transparent;
+  font: inherit;
+  font-size: 0.75rem;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.task-filter-select-option:hover { background: #f1f7f4; }
+.task-filter-select-option:focus-visible { outline: 2px solid rgb(52 130 110 / 0.3); outline-offset: -2px; }
+.task-filter-select-option-selected { color: #18634f; background: #e6f4ed; font-weight: 700; }
+.task-filter-select-status { margin: 7px 8px; color: #71827b; font-size: 0.72rem; line-height: 1.35; }
+.task-filter-select-error { color: #b34035; }
+.task-filter-select-more { display: block; width: calc(100% - 10px); min-height: 34px; margin: 0 5px 5px; border: 0; border-radius: 6px; color: #18634f; background: #f1f7f4; font: inherit; font-size: 0.72rem; font-weight: 700; }
+.task-filter-select-more:hover { background: #e4f2eb; }
+.task-filter-select-more:focus-visible { outline: 2px solid rgb(52 130 110 / 0.3); outline-offset: 1px; }
 
 .search-field {
   display: flex;
@@ -2086,4 +2185,5 @@ td > span:not(.person-cell):not(.status-badge):not(.priority) {
   *,
   *::before,
   *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
+  .centered-loader-spinner { animation: none; }
 }

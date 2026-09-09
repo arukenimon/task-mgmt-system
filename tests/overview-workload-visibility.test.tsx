@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { TaskWorkspace } from "@/features/tasks/views/task-workspace";
 import type { Client, Person, Task, Team } from "@/features/tasks/models/task";
 import { updateTaskAction } from "@/features/tasks/controllers/task.actions";
@@ -24,8 +24,12 @@ vi.mock("@/features/identity/controllers/auth.actions", () => ({
 }));
 
 vi.mock("@/features/navigation/views/workspace-sidebar", () => ({
-  WorkspaceSidebar: () => null,
+  WorkspaceSidebar: ({ links }: { links: Record<string, string> }) => <a href={links.overview}>Overview navigation</a>,
 }));
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 const teams: Team[] = [{ id: "team-1", name: "Delivery", accent: "teal" }];
 const clients: Client[] = [
@@ -43,6 +47,67 @@ const tasks: Task[] = [
 ];
 
 describe("overview workload visibility", () => {
+  it("uses the compact v parameter when returning to the overview", () => {
+    render(<TaskWorkspace initialActorId="director" initialTasks={tasks} people={people} clients={clients} teams={teams} initialView="list" />);
+
+    expect(screen.getByRole("link", { name: "Overview navigation" }).getAttribute("href")).toBe("/overview?owner=all&v=list");
+  });
+
+  it("defaults members to their own tasks and clears back to that default", () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        items: [
+          { id: "owner-open", label: "Busy teammate" },
+          { id: "owner-idle", label: "Available teammate" },
+        ],
+        nextCursor: null,
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<TaskWorkspace initialActorId="owner-open" initialTasks={tasks} people={people} clients={clients} teams={teams} initialView="overview" />);
+
+    const assigneeFilter = screen.getByRole("button", { name: "Filter by assignee" });
+    expect(assigneeFilter.textContent).toContain("Busy teammate (You)");
+    expect((screen.getByRole("button", { name: "Clear all filters" }) as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.click(assigneeFilter);
+    return waitFor(() => {
+      expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/task-filter-options?kind=assignee&q=");
+      fireEvent.click(screen.getByRole("option", { name: "Available teammate" }));
+      fireEvent.click(screen.getByRole("button", { name: "Clear all filters" }));
+      expect(assigneeFilter.textContent).toContain("Busy teammate (You)");
+    });
+  });
+
+  it("searches client and team filter options through the paginated endpoint", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ items: [], nextCursor: null }) });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<TaskWorkspace initialActorId="director" initialTasks={tasks} people={people} clients={clients} teams={teams} initialView="overview" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Filter by client" }));
+    await waitFor(() => expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/task-filter-options?kind=client&q="));
+    fireEvent.change(screen.getByPlaceholderText("Search all clients"), { target: { value: "atlas" } });
+    await waitFor(() => expect(fetchMock.mock.calls[1]?.[0]).toBe("/api/task-filter-options?kind=client&q=atlas"));
+    fireEvent.click(screen.getByRole("button", { name: "Filter by team" }));
+    await waitFor(() => expect(fetchMock.mock.calls[2]?.[0]).toBe("/api/task-filter-options?kind=team&q="));
+  });
+
+  it("loads another assignee page with the Supabase cursor", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ items: [{ id: "owner-open", label: "Busy teammate" }], nextCursor: { label: "Busy teammate", id: "owner-open" } }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ items: [{ id: "owner-idle", label: "Available teammate" }], nextCursor: null }) });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<TaskWorkspace initialActorId="director" initialTasks={tasks} people={people} clients={clients} teams={teams} initialView="overview" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Filter by assignee" }));
+    const loadMore = await screen.findByRole("button", { name: "Load more" });
+    fireEvent.click(loadMore);
+
+    await waitFor(() => expect(fetchMock.mock.calls[1]?.[0]).toBe("/api/task-filter-options?kind=assignee&q=&cursorLabel=Busy+teammate&cursorId=owner-open"));
+    expect(screen.getByRole("option", { name: "Available teammate" })).toBeTruthy();
+  });
+
   it("starts with active workload and reveals completed or zero-load rows through All", () => {
     render(<TaskWorkspace initialActorId="director" initialTasks={tasks} people={people} clients={clients} teams={teams} initialView="overview" />);
 
@@ -61,7 +126,9 @@ describe("overview workload visibility", () => {
     render(<TaskWorkspace initialActorId="director" initialTasks={tasks} people={people} clients={clients} teams={teams} initialView="overview" />);
 
     fireEvent.click(screen.getByRole("button", { name: /Current work/ }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Edit task" })).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: "Edit task" }));
+    await waitFor(() => expect(screen.getByLabelText("Task name")).toBeTruthy());
     fireEvent.change(screen.getByLabelText("Task name"), { target: { value: "Revised current work" } });
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
 

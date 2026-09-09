@@ -17,7 +17,7 @@ export async function sendEmail(message: EmailMessage) {
 
   const transport = nodemailer.createTransport({
     host: process.env.MAILPIT_HOST ?? "127.0.0.1",
-    port: Number(process.env.MAILPIT_PORT ?? 55425),
+    port: Number(process.env.MAILPIT_PORT ?? 56425),
     secure: false,
   });
   await transport.sendMail({ from, to: message.to, subject: message.subject, html: message.html });

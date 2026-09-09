@@ -15,6 +15,7 @@ import { useActionState, useCallback, useEffect, useRef, useState, useTransition
 import { useRouter } from "next/navigation";
 import { ROLE_LABELS, type Role } from "@/features/identity/models/roles";
 import { AccountMenu } from "@/features/identity/views/account-menu";
+import { WorkspaceMainLoading } from "@/features/navigation/views/workspace-main-loading";
 import { WorkspaceSidebar } from "@/features/navigation/views/workspace-sidebar";
 import {
   createTeamAction,
@@ -59,6 +60,7 @@ function TeamManagementContent({ actor, teams, initialMemberPage, activeMemberCo
           <p className="workspace-header-context"><span>Workspace</span><span aria-hidden="true">/</span><strong>Team management</strong></p>
           <AccountMenu initials={actor.initials} name={actor.name} role={actor.role} />
         </header>
+        <WorkspaceMainLoading active="team" />
 
         <div className="workspace-content team-page-content">
           <header className="topbar team-topbar">
