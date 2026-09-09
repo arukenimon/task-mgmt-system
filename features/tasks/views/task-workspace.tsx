@@ -356,7 +356,7 @@ export function TaskWorkspace({ initialActorId, initialTasks, people, clients, t
       <section className="workspace-main">
         <header className="workspace-header">
           <p className="workspace-header-context"><span>Workspace</span><span aria-hidden="true">/</span><strong>{activeView.label}</strong></p>
-          <AccountMenu initials={actor.initials} name={actor.name} role={actor.role} />
+          <AccountMenu actorId={actor.id} initials={actor.initials} name={actor.name} role={actor.role} />
         </header>
         <WorkspaceMainLoading active={view} />
         <div className="workspace-content">

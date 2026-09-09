@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { dispatchOutboxAfterResponse } from "@/features/notifications/services/delivery-dispatch.service";
 import { allocateTask, getAuthenticatedProfile, getTask, getTaskAttachments, setTaskStatus, updateTask, uploadTaskAttachments } from "@/features/tasks/repositories/task.repository";
 import { canAllocate, canChangeStatus, validateStatus, validateTaskAttachments, validateTaskId, validateTaskInput, validateTaskUpdateInput } from "@/features/tasks/services/task.service";
 
@@ -11,6 +12,7 @@ export async function createTaskAction(input: unknown) {
   const teamId = await getTaskAssigneeTeam(taskInput.assigneeIds, profile.teamId);
   if (!teamId) throw new Error("A team is required to allocate this task.");
   const task = await allocateTask(teamId, taskInput);
+  dispatchOutboxAfterResponse();
   revalidateWorkspace();
   return task;
 }
@@ -41,6 +43,7 @@ export async function createTaskWithAttachmentsAction(formData: FormData) {
     }
   }
 
+  dispatchOutboxAfterResponse();
   revalidateWorkspace();
   return { taskId: task.id, attachmentError };
 }
@@ -51,6 +54,7 @@ export async function updateTaskStatusAction(taskId: string, status: unknown) {
   const [profile, task] = await Promise.all([getAuthenticatedProfile(), getTask(validTaskId)]);
   if (!canChangeStatus(profile.role, profile.id, task.assigneeIds)) throw new Error("You can update only work assigned to you.");
   await setTaskStatus(validTaskId, nextStatus);
+  dispatchOutboxAfterResponse();
   revalidateWorkspace();
 }
 
@@ -65,6 +69,7 @@ export async function updateTaskAction(input: unknown) {
   if (!teamId) throw new Error("Select active team members from one team.");
 
   await updateTask(teamId, taskInput);
+  dispatchOutboxAfterResponse();
   revalidateWorkspace();
 }
 
