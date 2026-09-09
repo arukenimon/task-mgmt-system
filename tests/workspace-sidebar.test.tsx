@@ -1,5 +1,7 @@
-import { render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { beginWorkspaceNavigation } from "@/features/navigation/models/workspace-navigation";
+import { WorkspaceMainLoading } from "@/features/navigation/views/workspace-main-loading";
 import { WorkspaceSidebar } from "@/features/navigation/views/workspace-sidebar";
 
 describe("workspace sidebar", () => {
@@ -19,5 +21,28 @@ describe("workspace sidebar", () => {
     expect(managementLink.getAttribute("href")).toBe("/team?scope=all");
     expect(managementLink.getAttribute("aria-current")).toBe("page");
     expect(screen.getByRole("link", { name: "Client management" }).getAttribute("href")).toBe("/clients");
+  });
+
+  it("highlights the selected sidebar destination before the route finishes loading", () => {
+    const { rerender } = render(<WorkspaceSidebar active="overview" showTeamManagement={false} />);
+
+    act(() => beginWorkspaceNavigation("list"));
+
+    expect(screen.getByRole("link", { name: "Tasks" }).classList.contains("nav-item-active")).toBe(true);
+    expect(screen.getByRole("link", { name: "Overview" }).classList.contains("nav-item-active")).toBe(false);
+
+    rerender(<WorkspaceSidebar active="list" showTeamManagement={false} />);
+    expect(screen.getByRole("link", { name: "Tasks" }).getAttribute("aria-current")).toBeNull();
+  });
+
+  it("clears the loading state when Tasks returns to Kanban", () => {
+    const props = { links: { list: "/kanban?owner=all" }, showTeamManagement: false, taskDestination: "board" as const };
+    const { rerender } = render(<><WorkspaceSidebar {...props} active="overview" /><WorkspaceMainLoading active="overview" /></>);
+
+    fireEvent.click(screen.getByRole("link", { name: "Tasks" }));
+    expect(screen.getByText("Loading Kanban board")).toBeTruthy();
+
+    rerender(<><WorkspaceSidebar {...props} active="board" /><WorkspaceMainLoading active="board" /></>);
+    expect(screen.queryByText("Loading Kanban board")).toBeNull();
   });
 });

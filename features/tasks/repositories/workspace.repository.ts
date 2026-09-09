@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { TASK_PRIORITIES, TASK_STATUSES, type Client, type Person, type Task, type Team } from "@/features/tasks/models/task";
 import { loadKanbanTaskPage } from "@/features/tasks/repositories/kanban.repository";
 import type { InitialKanbanPages } from "@/features/tasks/models/kanban";
-import type { TaskFilters } from "@/features/tasks/models/task-filters";
+import { resolveTaskFiltersForActor, type TaskFilters } from "@/features/tasks/models/task-filters";
 
 function assertRole(value: string): Person["role"] {
   if (value === "senior_director" || value === "account_director" || value === "team_member") return value;
@@ -14,6 +14,7 @@ function assertRole(value: string): Person["role"] {
 
 type WorkspaceLoadOptions = {
   kanbanFilters?: TaskFilters;
+  hasExplicitOwnerFilter?: boolean;
 };
 
 async function loadInitialKanbanPages(filters: TaskFilters): Promise<InitialKanbanPages> {
@@ -40,7 +41,10 @@ export async function loadWorkspaceForCurrentUser(options: WorkspaceLoadOptions 
 
   if (peopleResult.error || clientsResult.error || teamsResult.error) throw new Error("Unable to load workspace data.");
 
-  const kanbanPages = options.kanbanFilters ? await loadInitialKanbanPages(options.kanbanFilters) : undefined;
+  const kanbanFilters = options.kanbanFilters
+    ? resolveTaskFiltersForActor(options.kanbanFilters, profile, Boolean(options.hasExplicitOwnerFilter))
+    : undefined;
+  const kanbanPages = kanbanFilters ? await loadInitialKanbanPages(kanbanFilters) : undefined;
   const tasksResult = kanbanPages ? null : await supabase.from("tasks").select("id,title,description,client_id,team_id,created_by_id,status,priority,due_date,completed_at,created_at,task_assignees(profile_id)").order("due_date");
   if (tasksResult?.error) throw new Error("Unable to load workspace data.");
 

@@ -1,8 +1,10 @@
 "use client";
 
 import { ChevronDown, LogOut, UserRound } from "lucide-react";
+import Link from "next/link";
 import { signOut } from "@/features/identity/controllers/auth.actions";
 import { ROLE_LABELS, type Role } from "@/features/identity/models/roles";
+import { beginWorkspaceNavigation, shouldTrackWorkspaceNavigation } from "@/features/navigation/models/workspace-navigation";
 
 type AccountMenuProps = {
   initials: string;
@@ -24,7 +26,7 @@ export function AccountMenu({ initials, name, role }: AccountMenuProps) {
           <span className="avatar avatar-large" aria-hidden="true">{initials}</span>
           <div><strong>{name}</strong><span>{ROLE_LABELS[role]}</span></div>
         </div>
-        <a className="account-menu-action" href="/profile"><UserRound size={16} aria-hidden="true" />Profile settings</a>
+        <Link className="account-menu-action" href="/profile" onClick={(event) => { if (shouldTrackWorkspaceNavigation(event)) beginWorkspaceNavigation("profile"); }}><UserRound size={16} aria-hidden="true" />Profile settings</Link>
         <form action={signOut}>
           <button className="account-menu-action account-menu-sign-out" type="submit"><LogOut size={16} aria-hidden="true" />Sign out</button>
         </form>
