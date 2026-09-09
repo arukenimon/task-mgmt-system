@@ -2,9 +2,10 @@
 
 import { Building2, LayoutDashboard, ListTodo, PanelLeftClose, PanelLeftOpen, Users } from "lucide-react";
 import Link from "next/link";
-import { useSyncExternalStore } from "react";
+import { useSyncExternalStore, type MouseEvent } from "react";
+import { beginWorkspaceNavigation, shouldTrackWorkspaceNavigation, useWorkspaceNavigation, type WorkspaceDestination } from "@/features/navigation/models/workspace-navigation";
 
-export type WorkspaceDestination = "overview" | "list" | "calendar" | "board" | "team" | "clients" | "profile";
+export type { WorkspaceDestination } from "@/features/navigation/models/workspace-navigation";
 
 const NAVIGATION = [
   { id: "overview", label: "Overview", href: "/overview", icon: LayoutDashboard },
@@ -45,20 +46,27 @@ type WorkspaceSidebarProps = {
   showTeamManagement: boolean;
   teamName?: string | null;
   links?: Partial<Record<WorkspaceDestination, string>>;
+  taskDestination?: Extract<WorkspaceDestination, "list" | "calendar" | "board">;
 };
 
-export function WorkspaceSidebar({ active, showTeamManagement, teamName, links = {} }: WorkspaceSidebarProps) {
+export function WorkspaceSidebar({ active, showTeamManagement, teamName, links = {}, taskDestination = "list" }: WorkspaceSidebarProps) {
   const collapsed = useSyncExternalStore(
     subscribeToSidebarCollapsed,
     getSidebarCollapsedSnapshot,
     getServerSidebarCollapsedSnapshot,
   );
-  const isTaskView = active === "list" || active === "calendar" || active === "board";
+  const pendingDestination = useWorkspaceNavigation(active);
+  const displayedDestination = pendingDestination ?? active;
+  const isTaskView = displayedDestination === "list" || displayedDestination === "calendar" || displayedDestination === "board";
   const SidebarToggleIcon = collapsed ? PanelLeftOpen : PanelLeftClose;
 
   function updateCollapsed(nextCollapsed: boolean) {
     window.localStorage.setItem(SIDEBAR_COLLAPSE_STORAGE_KEY, String(nextCollapsed));
     window.dispatchEvent(new Event(SIDEBAR_COLLAPSE_CHANGE_EVENT));
+  }
+
+  function handleNavigation(destination: WorkspaceDestination, event: MouseEvent<HTMLAnchorElement>) {
+    if (destination !== displayedDestination && shouldTrackWorkspaceNavigation(event)) beginWorkspaceNavigation(destination);
   }
 
   return (
@@ -86,10 +94,11 @@ export function WorkspaceSidebar({ active, showTeamManagement, teamName, links =
           return (
             <Link
               aria-label={item.label}
-              aria-current={active === item.id ? "page" : undefined}
-              className={active === item.id ? "nav-item nav-item-active" : "nav-item"}
+              aria-current={displayedDestination === item.id ? "page" : undefined}
+              className={displayedDestination === item.id ? "nav-item nav-item-active" : "nav-item"}
               href={links[item.id] ?? item.href}
               key={item.id}
+              onClick={(event) => handleNavigation(item.id, event)}
               title={collapsed ? item.label : undefined}
             >
               <Icon size={18} aria-hidden="true" />
@@ -97,7 +106,7 @@ export function WorkspaceSidebar({ active, showTeamManagement, teamName, links =
             </Link>
           );
         })}
-        <Link aria-label="Tasks" className={isTaskView ? "nav-item nav-item-active" : "nav-item"} href={links.list ?? "/list"} title={collapsed ? "Tasks" : undefined}>
+        <Link aria-label="Tasks" className={isTaskView ? "nav-item nav-item-active" : "nav-item"} href={links.list ?? "/list"} onClick={(event) => { if (displayedDestination !== taskDestination) handleNavigation(taskDestination, event); }} title={collapsed ? "Tasks" : undefined}>
           <ListTodo size={18} aria-hidden="true" />
           <span className="nav-item-label">Tasks</span>
         </Link>
@@ -105,9 +114,10 @@ export function WorkspaceSidebar({ active, showTeamManagement, teamName, links =
           <>
             <Link
               aria-label="Team management"
-              aria-current={active === "team" ? "page" : undefined}
-              className={active === "team" ? "nav-item nav-item-active nav-item-admin" : "nav-item nav-item-admin"}
+              aria-current={displayedDestination === "team" ? "page" : undefined}
+              className={displayedDestination === "team" ? "nav-item nav-item-active nav-item-admin" : "nav-item nav-item-admin"}
               href={links.team ?? "/team"}
+              onClick={(event) => handleNavigation("team", event)}
               title={collapsed ? "Team management" : undefined}
             >
               <Users size={18} aria-hidden="true" />
@@ -115,9 +125,10 @@ export function WorkspaceSidebar({ active, showTeamManagement, teamName, links =
             </Link>
             <Link
               aria-label="Client management"
-              aria-current={active === "clients" ? "page" : undefined}
-              className={active === "clients" ? "nav-item nav-item-active" : "nav-item"}
+              aria-current={displayedDestination === "clients" ? "page" : undefined}
+              className={displayedDestination === "clients" ? "nav-item nav-item-active" : "nav-item"}
               href={links.clients ?? "/clients"}
+              onClick={(event) => handleNavigation("clients", event)}
               title={collapsed ? "Client management" : undefined}
             >
               <Building2 size={18} aria-hidden="true" />

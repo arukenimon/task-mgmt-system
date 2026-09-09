@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DEFAULT_FILTERS, matchesTaskFilters, todayKey } from "@/features/tasks/models/task-filters";
-import type { Task } from "@/features/tasks/models/task";
+import { DEFAULT_FILTERS, defaultTaskFiltersForActor, matchesTaskFilters, resolveTaskFiltersForActor, todayKey } from "@/features/tasks/models/task-filters";
+import type { Person, Task } from "@/features/tasks/models/task";
 
 function dateOffset(days: number) {
   const date = new Date(`${todayKey()}T12:00:00Z`);
@@ -49,6 +49,16 @@ describe("task filters", () => {
     expect(matchesTaskFilters(task({}), filters)).toBe(true);
     expect(matchesTaskFilters(task({ assigneeIds: ["member-2"] }), filters)).toBe(false);
     expect(matchesTaskFilters(task({ description: "Different work" }), filters)).toBe(false);
+  });
+
+  it("defaults a member to their own tasks without overriding an explicit all-assignees choice", () => {
+    const member: Pick<Person, "id" | "role"> = { id: "member-1", role: "team_member" };
+    const director: Pick<Person, "id" | "role"> = { id: "director-1", role: "senior_director" };
+
+    expect(defaultTaskFiltersForActor(member).ownerId).toBe("member-1");
+    expect(defaultTaskFiltersForActor(director).ownerId).toBe("all");
+    expect(resolveTaskFiltersForActor(DEFAULT_FILTERS, member, false).ownerId).toBe("member-1");
+    expect(resolveTaskFiltersForActor(DEFAULT_FILTERS, member, true).ownerId).toBe("all");
   });
 
   it("keeps completed overdue work out of the overdue queue", () => {

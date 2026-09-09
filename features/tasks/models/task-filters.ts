@@ -1,4 +1,4 @@
-import type { Task, TaskPriority, TaskStatus } from "./task";
+import type { Person, Task, TaskPriority, TaskStatus } from "./task";
 
 export type DueWindow = "all" | "overdue" | "today" | "week";
 
@@ -21,6 +21,24 @@ export const DEFAULT_FILTERS: TaskFilters = {
   due: "all",
   query: "",
 };
+
+type TaskFilterActor = Pick<Person, "id" | "role">;
+
+export function defaultTaskFiltersForActor(actor: TaskFilterActor): TaskFilters {
+  return {
+    ...DEFAULT_FILTERS,
+    ownerId: actor.role === "team_member" ? actor.id : DEFAULT_FILTERS.ownerId,
+  };
+}
+
+/**
+ * Team members begin with their own work in scope. An explicit assignee filter,
+ * including `owner=all`, always takes precedence over that default.
+ */
+export function resolveTaskFiltersForActor(filters: TaskFilters, actor: TaskFilterActor, hasExplicitOwnerFilter: boolean): TaskFilters {
+  if (hasExplicitOwnerFilter || filters.ownerId !== "all" || actor.role !== "team_member") return filters;
+  return { ...filters, ownerId: actor.id };
+}
 
 export function todayKey() {
   const now = new Date();
