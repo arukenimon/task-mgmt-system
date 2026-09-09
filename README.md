@@ -2,7 +2,7 @@
 
 Bespoke is a secure, role-aware task management system for teams delivering client work. It gives individual contributors, Account Directors, and Senior Directors a shared view of commitments, workload, deadlines, and client delivery—without giving client users access to the workspace.
 
-Built with Next.js and Supabase, Bespoke combines a focused task workspace with database-enforced permissions, audit history, image attachments, and automated email notifications.
+Built with Next.js and Supabase, Bespoke combines a focused task workspace with database-enforced permissions, audit history, image attachments, and real-time in-app and email notifications.
 
 ## What it does
 
@@ -11,8 +11,9 @@ Built with Next.js and Supabase, Bespoke combines a focused task workspace with 
 - Work in List, Calendar, and Kanban views, with shared filtering by client, team, assignee, status, priority, deadline, and free-text search.
 - Surface operational risk in the Overview: open work, overdue work, deadlines due soon, completion and on-time rates, workload by client, and workload by person.
 - Attach up to four task images (PNG, JPEG, or WebP; 5 MB each) to give assignments useful visual context.
-- Keep a task activity trail for creation, assignment, status changes, and completion.
-- Send assignment and task-escalation notifications immediately after task writes, with an idempotent weekday deadline digest and cron recovery through the outbox worker.
+- Keep a live task activity trail for creation, assignment or removal, detail edits, status changes, and completion.
+- Receive a real-time in-app notification inbox for task assignments, removals, edits, status changes, and completion, with unread counts and a bulk mark-as-read action.
+- Send assignment and task-escalation emails immediately after task writes, with an idempotent weekday deadline digest and cron recovery through the outbox worker.
 - Let Senior Directors maintain teams, invite and deactivate members, set roles, and manage active or archived clients.
 - Let every signed-in user maintain their own profile name and initials.
 
@@ -32,6 +33,8 @@ These rules are checked in Server Actions and enforced again in Supabase Row Lev
 flowchart LR
   Manager[Senior Director or Account Director] -->|allocates task| Task[Task + assignees]
   Task --> Activity[Task activity trail]
+  Activity --> Inbox[In-app notification inbox]
+  Inbox --> Realtime[Supabase Realtime]
   Task --> Outbox[Email outbox]
   Actions[Task Server Actions] -->|post-response delivery| Outbox
   Cron[Vercel Cron] -->|weekday digest + recovery| Outbox
@@ -52,6 +55,7 @@ flowchart LR
   Service --> Repository[Supabase repositories]
   Repository --> RLS[Supabase Auth + RLS]
   RLS --> Database[(PostgreSQL + Storage)]
+  Database --> Inbox[In-app notifications + Realtime]
   Database --> Outbox[Email outbox]
   Actions[Task Server Actions] --> Outbox
   Cron[Vercel Cron] --> Outbox
@@ -70,9 +74,9 @@ flowchart LR
 
 ### Data and notification model
 
-The core relationship is `teams → profiles → clients → tasks`. A task has a primary owner for compatibility and a `task_assignees` join table for multi-person assignments. PostgreSQL triggers record task activity and enqueue assignment and task-escalation notifications. Successful task Server Actions flush a leased outbox batch after the response; the protected cron endpoint creates deduplicated weekday deadline digests and remains the recovery worker. Delivery uses SMTP locally or Brevo in production.
+The core relationship is `teams → profiles → clients → tasks`. A task has a primary owner for compatibility and a `task_assignees` join table for multi-person assignments. PostgreSQL triggers record task activity for assignments, removals, task edits, and status changes; those events create per-user in-app notifications, which are delivered to the notification inbox through Supabase Realtime. Assignment and task-escalation emails enter a leased outbox. Successful task Server Actions flush an outbox batch after the response; the protected cron endpoint creates deduplicated weekday deadline digests and remains the recovery worker. Email delivery uses SMTP locally or Brevo in production.
 
-All browser-accessible tables and the private `task-attachments` storage bucket are protected by RLS. The Supabase service-role key is used only by server-side invitation, deactivation, and email-worker operations.
+All browser-accessible tables—including the per-user notification inbox—and the private `task-attachments` storage bucket are protected by RLS. The Supabase service-role key is used only by server-side invitation, deactivation, and email-worker operations.
 
 ## Tech stack
 
@@ -141,6 +145,7 @@ Local Supabase services use these addresses:
 | North Account Director | `sophie.turner@taskhub.demo` |
 | South Account Director | `marcus.reed@taskhub.demo` |
 | North team member | `zoe.patel@taskhub.demo` |
+| North team member | `liam.chen@taskhub.demo` |
 | South team member | `olivia.grant@taskhub.demo` |
 
 The local Mailpit inbox captures invitation, password-recovery, and notification emails. Production users are invite-only: a Senior Director invites an account, and the recipient verifies the email link before choosing a password.
@@ -184,7 +189,7 @@ npm run build          # Production build
 npm run verify         # Lint + tests + production build
 ```
 
-The application suite covers task validation, assignment and status permissions, attachment constraints, filters, reporting, client management, and navigation visibility. Database-level RLS tests run separately because they require the local Supabase stack.
+The application suite covers task validation, assignment and status permissions, attachment constraints, filters, reporting, client management, email delivery, and navigation visibility. Database-level RLS tests separately cover role boundaries, task activity, real-time notification visibility, and notification read-state updates because they require the local Supabase stack.
 
 ## Deploy to Vercel
 
