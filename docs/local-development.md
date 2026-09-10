@@ -38,11 +38,18 @@ Senior Directors can use `/team` to create teams, send Supabase Auth invitations
 
 ```bash
 npx supabase migration new descriptive_change
-npm run db:reset
+npm run db:backup
+npm run db:reset -- --confirm
 npm run db:lint
 npm run db:test
 npm run db:types
 ```
+
+## Local data safety
+
+The local database persists through normal Docker Desktop and PC restarts. Stop it with `npm run db:stop` and resume it with `npm run db:start`; never use `supabase stop --no-backup` unless intentionally discarding every local record.
+
+Before a reset, use `npm run db:backup` to save a complete recovery snapshot to `backups/local-supabase/`. The directory is Git-ignored because snapshots can contain real user data. `npm run db:reset` will back up the database automatically but refuses to run until `-- --confirm` is supplied. Do not call `npx supabase db reset` directly: it bypasses the backup and confirmation safeguard.
 
 Never edit a migration that has been applied to a shared remote environment. Create a new migration, verify it locally, then review the SQL and RLS policy tests before pushing.
 
@@ -62,7 +69,8 @@ The seeded accounts use the password `DemoPass!2026`:
 ```bash
 npm run db:stop
 npm run db:start
-npm run db:reset
+npm run db:backup
+npm run db:reset -- --confirm
 ```
 
 If `supabase start` cannot contact Docker, fix Docker Desktop/WSL integration first. Do not expose the local stack to a public network; it is a development environment only.

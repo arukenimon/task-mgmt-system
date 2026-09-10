@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { TaskWorkspace, type WorkspaceView } from "@/features/tasks/views/task-workspace";
-import { DEFAULT_FILTERS, resolveTaskFiltersForActor, type TaskFilters } from "@/features/tasks/models/task-filters";
+import { DEFAULT_FILTERS, type TaskFilters } from "@/features/tasks/models/task-filters";
 import { hasSupabaseConfig } from "@/lib/supabase/env";
 import { loadWorkspaceForCurrentUser } from "@/features/tasks/repositories/workspace.repository";
 
@@ -39,11 +39,12 @@ export async function WorkspacePage({ searchParams, view }: WorkspacePageProps) 
   const initialTaskView = taskViewFromParams(params);
 
   if (!hasSupabaseConfig) redirect("/login");
-  const workspace = await loadWorkspaceForCurrentUser(view === "board" ? { kanbanFilters: requestedFilters, hasExplicitOwnerFilter } : undefined);
+  const taskStrategy = view === "board" ? "kanban" : view === "list" ? "page" : view === "calendar" ? "calendar" : "all";
+  const workspace = await loadWorkspaceForCurrentUser({ filters: requestedFilters, hasExplicitOwnerFilter, taskStrategy });
   if (!workspace) redirect("/login");
   const actor = workspace.people.find((person) => person.id === workspace.actorId);
   if (!actor) throw new Error("Your signed-in profile is not available in this workspace.");
-  const filters = resolveTaskFiltersForActor(requestedFilters, actor, hasExplicitOwnerFilter);
+  const filters = workspace.filters;
 
   return (
     <TaskWorkspace
@@ -52,6 +53,7 @@ export async function WorkspacePage({ searchParams, view }: WorkspacePageProps) 
       people={workspace.people}
       clients={workspace.clients}
       teams={workspace.teams}
+      initialTaskPage={workspace.taskPage}
       initialKanbanPages={workspace.kanbanPages}
       initialTaskView={initialTaskView}
       initialView={view}

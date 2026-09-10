@@ -1,21 +1,39 @@
 "use client";
 
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { TASK_STATUS_LABELS, type Client, type Task } from "@/features/tasks/models/task";
-import { todayKey } from "@/features/tasks/models/task-filters";
+import { todayKey, type TaskFilters } from "@/features/tasks/models/task-filters";
+import { TASK_CALENDAR_PAGE_SIZE, type TaskDateRange } from "@/features/tasks/models/task-page";
+import { fetchTaskPage, taskFilterKey } from "@/features/tasks/views/task-page-client";
 
 type CalendarPanelProps = {
-  tasks: Task[];
   clients: Client[];
-  onSelectTask: (id: string) => void;
+  filters: TaskFilters;
+  refreshKey: number;
+  onSelectTask: (task: Task) => void;
 };
 
 function clientFor(task: Task, clients: Client[]) {
   return clients.find((client) => client.id === task.clientId);
 }
 
-export function CalendarPanel({ tasks, clients, onSelectTask }: CalendarPanelProps) {
+function dateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function rangeForMonth(year: number, month: number): TaskDateRange {
+  return {
+    startDate: dateKey(new Date(year, month, 1)),
+    endDate: dateKey(new Date(year, month + 1, 0)),
+  };
+}
+
+export function CalendarPanel({ clients, filters, refreshKey, onSelectTask }: CalendarPanelProps) {
   const [visibleMonth, setVisibleMonth] = useState(() => {
     const today = new Date();
     return new Date(today.getFullYear(), today.getMonth(), 1);
@@ -25,9 +43,22 @@ export function CalendarPanel({ tasks, clients, onSelectTask }: CalendarPanelPro
   const firstDay = new Date(year, month, 1).getDay();
   const days = new Date(year, month + 1, 0).getDate();
   const cells = Array.from({ length: firstDay + days }, (_, index) => index < firstDay ? null : index - firstDay + 1);
+  const dateRange = useMemo(() => rangeForMonth(year, month), [year, month]);
+  const queryClient = useQueryClient();
+  const taskQuery = useQuery({
+    queryKey: ["task-calendar", ...taskFilterKey(filters), dateRange.startDate, dateRange.endDate],
+    queryFn: ({ signal }) => fetchTaskPage(filters, { dateRange, pageSize: TASK_CALENDAR_PAGE_SIZE }, signal),
+    staleTime: 30_000,
+  });
+
+  useEffect(() => {
+    if (refreshKey > 0) void queryClient.invalidateQueries({ queryKey: ["task-calendar"] });
+  }, [queryClient, refreshKey]);
+
+  const tasks = taskQuery.data?.tasks ?? [];
 
   function dateForDay(day: number) {
-    return new Date(year, month, day, 12).toISOString().slice(0, 10);
+    return dateKey(new Date(year, month, day));
   }
 
   function changeMonth(offset: number) {
@@ -47,6 +78,7 @@ export function CalendarPanel({ tasks, clients, onSelectTask }: CalendarPanelPro
         </div>
       </div>
       <div className="calendar-weekdays">{["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => <span key={day}>{day}</span>)}</div>
+      {taskQuery.isError ? <p className="board-load-error" role="alert">{taskQuery.error.message}</p> : null}
       <div className="calendar-grid">
         {cells.map((day, index) => {
           const key = day ? dateForDay(day) : `blank-${index}`;
@@ -56,7 +88,7 @@ export function CalendarPanel({ tasks, clients, onSelectTask }: CalendarPanelPro
               {day ? <>
                 <span className="calendar-date">{day}</span>
                 {dayTasks.slice(0, 3).map((task) => (
-                  <button aria-label={`${task.status === "complete" ? "Completed" : TASK_STATUS_LABELS[task.status]} task: ${task.title}`} className={`calendar-task priority-${task.priority} status-${task.status}`} type="button" key={task.id} onClick={() => onSelectTask(task.id)}>
+                  <button aria-label={`${task.status === "complete" ? "Completed" : TASK_STATUS_LABELS[task.status]} task: ${task.title}`} className={`calendar-task priority-${task.priority} status-${task.status}`} type="button" key={task.id} onClick={() => onSelectTask(task)}>
                     {task.title}<small>{clientFor(task, clients)?.name}</small>
                   </button>
                 ))}
