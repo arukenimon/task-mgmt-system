@@ -12,6 +12,7 @@ describe("workspace sidebar", () => {
     expect(tasksLink.classList.contains("nav-item-active")).toBe(true);
     expect(screen.queryByRole("link", { name: "Team management" })).toBeNull();
     expect(screen.getByText("North Team")).toBeTruthy();
+    expect(screen.queryByText("Your team")).toBeNull();
   });
 
   it("shows the management destination only for authorized workspaces", () => {
@@ -21,6 +22,7 @@ describe("workspace sidebar", () => {
     expect(managementLink.getAttribute("href")).toBe("/team?scope=all");
     expect(managementLink.getAttribute("aria-current")).toBe("page");
     expect(screen.getByRole("link", { name: "Client management" }).getAttribute("href")).toBe("/clients");
+    expect(document.querySelector(".sidebar-team")).toBeNull();
   });
 
   it("highlights the selected sidebar destination before the route finishes loading", () => {

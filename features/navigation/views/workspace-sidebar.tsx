@@ -58,6 +58,8 @@ export function WorkspaceSidebar({ active, showTeamManagement, teamName, links =
   const pendingDestination = useWorkspaceNavigation(active);
   const displayedDestination = pendingDestination ?? active;
   const isTaskView = displayedDestination === "list" || displayedDestination === "calendar" || displayedDestination === "board";
+  const displayTeamSummary = !showTeamManagement;
+  const displayedTeamName = teamName ?? "Organisation-wide";
   const SidebarToggleIcon = collapsed ? PanelLeftOpen : PanelLeftClose;
 
   function updateCollapsed(nextCollapsed: boolean) {
@@ -137,10 +139,12 @@ export function WorkspaceSidebar({ active, showTeamManagement, teamName, links =
           </>
         ) : null}
       </nav>
-      <section className="sidebar-team" aria-label={`Your team: ${teamName ?? "Organisation-wide"}`} title={collapsed ? teamName ?? "Organisation-wide" : undefined}>
-        <span className="sidebar-team-icon" aria-hidden="true"><Building2 size={17} /></span>
-        <span className="sidebar-team-copy"><small>Your team</small><strong>{teamName ?? "Organisation-wide"}</strong></span>
-      </section>
+      {displayTeamSummary ? (
+        <section className="sidebar-team" aria-label={`Team: ${displayedTeamName}`} title={collapsed ? displayedTeamName : undefined}>
+          <span className="sidebar-team-icon" aria-hidden="true"><Building2 size={17} /></span>
+          <span className="sidebar-team-copy"><strong>{displayedTeamName}</strong></span>
+        </section>
+      ) : null}
     </aside>
   );
 }
