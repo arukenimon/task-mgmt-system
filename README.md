@@ -137,7 +137,7 @@ Local Supabase services use these addresses:
 
 ### Local demo accounts
 
-`npm run db:reset` applies every migration and restores deterministic demo data. All seeded accounts use the password `DemoPass!2026`.
+`npm run db:reset -- --confirm` applies every migration and restores deterministic demo data. It first creates a local recovery snapshot. All seeded accounts use the password `DemoPass!2026`.
 
 | Role | Email |
 | --- | --- |
@@ -171,13 +171,16 @@ Create schema changes as new migrations—never edit a migration that has alread
 
 ```powershell
 npx supabase migration new descriptive_change
-npm run db:reset
+npm run db:backup
+npm run db:reset -- --confirm
 npm run db:lint
 npm run db:test
 npm run db:types
 ```
 
-`db:reset` seeds local data. `db:test` runs the pgTAP suite that verifies the role and RLS boundaries, including deactivated-account access.
+Local Supabase data survives ordinary `npm run db:stop`, Docker Desktop shutdowns, and `npm run db:start`. Use `npm run db:backup` to save a complete local database snapshot under `backups/local-supabase/`. These files are intentionally Git-ignored because they can contain real user data; copy snapshots to another secure location if the machine itself needs disaster recovery.
+
+`npm run db:reset` now refuses to delete data unless you explicitly append `-- --confirm`. With that confirmation, it creates a snapshot first and then seeds local data. Do not use `supabase stop --no-backup`, Docker volume-prune commands, or `npx supabase db reset` directly, because those bypass this safeguard. `db:test` runs the pgTAP suite that verifies the role and RLS boundaries, including deactivated-account access.
 
 ## Quality checks
 
