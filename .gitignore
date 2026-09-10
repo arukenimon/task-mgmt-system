@@ -13,6 +13,9 @@
 # testing
 /coverage
 
+# Local Supabase recovery snapshots (may contain real user data)
+/backups/
+
 # next.js
 /.next/
 /out/

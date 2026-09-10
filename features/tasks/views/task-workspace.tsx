@@ -10,7 +10,6 @@ import {
   ListTodo,
   Plus,
   Search,
-  SearchX,
   X,
 } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
@@ -28,6 +27,7 @@ import { createTaskWithAttachmentsAction, updateTaskAction, updateTaskStatusActi
 import { buildOverview, type ClientWorkloadRow, type Overview, type OwnerWorkloadRow } from "@/features/reports/services/overview.service";
 import { defaultTaskFiltersForActor, matchesTaskFilters, todayKey, type TaskFilters } from "@/features/tasks/models/task-filters";
 import type { InitialKanbanPages } from "@/features/tasks/models/kanban";
+import type { TaskPage } from "@/features/tasks/models/task-page";
 import type { TaskDraft } from "@/features/tasks/models/task-draft";
 import {
   TASK_PRIORITY_LABELS,
@@ -36,7 +36,6 @@ import {
   type Client,
   type Person,
   type Task,
-  type TaskPriority,
   type TaskStatus,
   type Team,
 } from "@/features/tasks/models/task";
@@ -53,6 +52,7 @@ type TaskWorkspaceProps = {
   initialTaskView?: Exclude<WorkspaceView, "overview">;
   initialView?: WorkspaceView;
   initialFilters?: TaskFilters;
+  initialTaskPage?: TaskPage;
   initialKanbanPages?: InitialKanbanPages;
 };
 
@@ -83,6 +83,9 @@ function TaskDetailLoading() {
 
 const CalendarPanel = dynamic(() => import("@/features/tasks/views/calendar-panel").then((module) => module.CalendarPanel), {
   loading: () => <TaskViewLoading label="Preparing calendar…" />,
+});
+const PaginatedTaskList = dynamic(() => import("@/features/tasks/views/paginated-task-list").then((module) => module.PaginatedTaskList), {
+  loading: () => <TaskViewLoading label="Preparing task list…" />,
 });
 const PaginatedKanbanBoard = dynamic(() => import("@/features/tasks/views/paginated-kanban-board").then((module) => module.PaginatedKanbanBoard), {
   loading: () => <TaskViewLoading label="Preparing Kanban board…" />,
@@ -129,21 +132,12 @@ function StatusBadge({ status }: { status: TaskStatus }) {
   return <span className={`status-badge status-${status}`}>{TASK_STATUS_LABELS[status]}</span>;
 }
 
-function PriorityDot({ priority }: { priority: TaskPriority }) {
-  return <span className={`priority priority-${priority}`}>{TASK_PRIORITY_LABELS[priority]}</span>;
-}
-
 function AssigneeAvatars({ task, people }: { task: Task; people: Person[] }) {
   const assignees = assigneesFor(task, people);
   return <span className="assignee-avatars" aria-label={`Assigned to ${assignees.map((person) => person.name).join(", ")}`}>{assignees.map((person) => <span className="avatar" key={person.id} title={person.name}>{person.initials}</span>)}</span>;
 }
 
-function AssigneeNames({ task, people }: { task: Task; people: Person[] }) {
-  const assignees = assigneesFor(task, people);
-  return <span className="person-cell"><AssigneeAvatars task={task} people={people} /><span>{assignees.map((person) => person.name).join(", ")}</span></span>;
-}
-
-export function TaskWorkspace({ initialActorId, initialTasks, people, clients, teams, initialTaskView, initialView, initialFilters, initialKanbanPages }: TaskWorkspaceProps) {
+export function TaskWorkspace({ initialActorId, initialTasks, people, clients, teams, initialTaskView, initialView, initialFilters, initialTaskPage, initialKanbanPages }: TaskWorkspaceProps) {
   const router = useRouter();
   const foundActor = people.find((person) => person.id === initialActorId);
 
@@ -159,6 +153,7 @@ export function TaskWorkspace({ initialActorId, initialTasks, people, clients, t
   const [showComposer, setShowComposer] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [kanbanRefreshKey, setKanbanRefreshKey] = useState(0);
+  const [taskDataRefreshKey, setTaskDataRefreshKey] = useState(0);
   const [attachments, setAttachments] = useState<File[]>([]);
   const [isAllocating, setIsAllocating] = useState(false);
   const [composerError, setComposerError] = useState<string | null>(null);
@@ -237,6 +232,11 @@ export function TaskWorkspace({ initialActorId, initialTasks, people, clients, t
     setEditingTask(task);
   }
 
+  function selectTask(task: Task) {
+    setTasks((current) => current.some((item) => item.id === task.id) ? current.map((item) => item.id === task.id ? task : item) : [...current, task]);
+    setSelectedTaskId(task.id);
+  }
+
   async function updateStatus(taskId: string, status: TaskStatus, knownTask?: Task) {
     const target = tasks.find((task) => task.id === taskId) ?? knownTask;
     if (!target) return false;
@@ -251,6 +251,7 @@ export function TaskWorkspace({ initialActorId, initialTasks, people, clients, t
     try {
       await updateTaskStatusAction(taskId, status);
       setKanbanRefreshKey((current) => current + 1);
+      setTaskDataRefreshKey((current) => current + 1);
       router.refresh();
       return true;
     } catch {
@@ -302,6 +303,7 @@ export function TaskWorkspace({ initialActorId, initialTasks, people, clients, t
       setAttachments([]);
       setNotice(result.attachmentError ?? `${assignees.map((person) => person.name).join(", ")} have been allocated “${newTask.title}”. Assignment emails are queued in production.`);
       setKanbanRefreshKey((current) => current + 1);
+      setTaskDataRefreshKey((current) => current + 1);
       router.refresh();
     } catch (error) {
       setComposerError(error instanceof Error ? error.message : "The task could not be allocated.");
@@ -341,6 +343,7 @@ export function TaskWorkspace({ initialActorId, initialTasks, people, clients, t
       setEditingTask(null);
       setNotice(`“${updatedTask.title}” was updated.`);
       setKanbanRefreshKey((current) => current + 1);
+      setTaskDataRefreshKey((current) => current + 1);
       router.refresh();
     } catch (error) {
       setEditorError(error instanceof Error ? error.message : "The task could not be updated.");
@@ -367,10 +370,9 @@ export function TaskWorkspace({ initialActorId, initialTasks, people, clients, t
             {view !== "overview" ? <TaskViewSwitcher active={view} hrefForView={hrefForView} /> : null}
           </div>
           {view === "overview" ? <OverviewPanel overview={overview} tasks={filteredTasks} clients={clients} filters={filters} people={people} onSelectTask={setSelectedTaskId} onViewAll={() => { beginWorkspaceNavigation("list"); router.push(hrefForView("list")); }} onFilterChange={updateFilters} /> : null}
-          {view !== "overview" && view !== "board" && filteredTasks.length === 0 ? <EmptyTasks onReset={resetFilters} /> : null}
-          {view === "list" && filteredTasks.length > 0 ? <ListPanel tasks={filteredTasks} clients={clients} people={people} onSelectTask={setSelectedTaskId} /> : null}
-          {view === "calendar" && filteredTasks.length > 0 ? <CalendarPanel tasks={filteredTasks} clients={clients} onSelectTask={setSelectedTaskId} /> : null}
-          {view === "board" ? <PaginatedKanbanBoard clients={clients} people={people} filters={filters} initialFilters={initialFilters ?? defaultFilters} initialPages={initialKanbanPages} refreshKey={kanbanRefreshKey} onMove={(task, status) => updateStatus(task.id, status, task)} onSelectTask={(task) => { setTasks((current) => current.some((item) => item.id === task.id) ? current : [...current, task]); setSelectedTaskId(task.id); }} /> : null}
+          {view === "list" ? <PaginatedTaskList clients={clients} people={people} filters={filters} initialFilters={initialFilters ?? defaultFilters} initialPage={initialTaskPage} refreshKey={taskDataRefreshKey} onReset={resetFilters} onSelectTask={selectTask} /> : null}
+          {view === "calendar" ? <CalendarPanel clients={clients} filters={filters} refreshKey={taskDataRefreshKey} onSelectTask={selectTask} /> : null}
+          {view === "board" ? <PaginatedKanbanBoard clients={clients} people={people} filters={filters} initialFilters={initialFilters ?? defaultFilters} initialPages={initialKanbanPages} refreshKey={kanbanRefreshKey} onMove={(task, status) => updateStatus(task.id, status, task)} onSelectTask={selectTask} /> : null}
         </div>
       </section>
 
@@ -380,7 +382,6 @@ export function TaskWorkspace({ initialActorId, initialTasks, people, clients, t
     </main>
   );
 }
-
 function FilterBar({ actorId, clients, defaultOwnerId, filters, people, teams, onChange, onReset }: { actorId: string; clients: Client[]; defaultOwnerId: string; filters: TaskFilters; people: Person[]; teams: Team[]; onChange: (patch: Partial<TaskFilters>) => void; onReset: () => void }) {
   const hasActiveFilters = filters.query.trim().length > 0 || filters.clientId !== "all" || filters.teamId !== "all" || filters.ownerId !== defaultOwnerId || filters.status !== "all" || filters.priority !== "all" || filters.due !== "all";
   const selectedClient = clients.find((client) => client.id === filters.clientId);
@@ -425,7 +426,6 @@ function WorkloadScopeToggle({ label, value, onChange }: { label: string; value:
     </div>
   );
 }
-
 function ClientWorkloadPanel({ rows, activeClientId, onFilterClient }: { rows: ClientWorkloadRow[]; activeClientId: string; onFilterClient: (clientId: string) => void }) {
   const [scope, setScope] = useState<WorkloadScope>("active");
   const visibleRows = scope === "active" ? rows.filter((row) => row.open > 0) : rows;
@@ -546,12 +546,4 @@ function OverviewPanel({ overview, tasks, clients, filters, people, onSelectTask
       </section>
     </div>
   );
-}
-
-function EmptyTasks({ onReset }: { onReset: () => void }) {
-  return <section className="empty-state" aria-live="polite"><span className="empty-state-icon"><SearchX size={24} aria-hidden="true" /></span><p className="eyebrow">No matching tasks</p><h2>Try a broader filter</h2><p>Clear the current filters to return to your complete visible workload.</p><button type="button" className="button button-primary" onClick={onReset}>Clear filters</button></section>;
-}
-
-function ListPanel({ tasks, clients, people, onSelectTask }: { tasks: Task[]; clients: Client[]; people: Person[]; onSelectTask: (id: string) => void }) {
-  return <section className="panel task-list-panel"><div className="panel-heading"><div><p className="eyebrow">List view</p><h2>{tasks.length} matching tasks</h2></div></div><div className="table-wrap"><table><thead><tr><th>Task</th><th>Client</th><th>Assignees</th><th>Deadline</th><th>Priority</th><th>Status</th></tr></thead><tbody>{tasks.map((task) => <tr key={task.id} onClick={() => onSelectTask(task.id)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelectTask(task.id); } }} role="button" tabIndex={0}><td><strong>{task.title}</strong><span>{task.description}</span></td><td>{clientFor(task, clients)?.name}</td><td><AssigneeNames task={task} people={people} /></td><td className={task.status !== "complete" && task.dueDate < todayKey() ? "deadline-overdue" : ""}>{formatDate(task.dueDate)}</td><td><PriorityDot priority={task.priority} /></td><td><StatusBadge status={task.status} /></td></tr>)}</tbody></table></div></section>;
 }
